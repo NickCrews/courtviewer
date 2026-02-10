@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const archiver = require('archiver');
 
 const DIST = path.join(__dirname, 'dist');
+const RELEASE_DIR = path.join(__dirname, 'release');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -148,3 +150,33 @@ for (const size of sizes) {
 }
 
 console.log('Build complete.');
+
+// ── Bundle for Chrome Web Store ──────────────────────────────────────────
+
+function bundleForRelease() {
+  ensureDir(RELEASE_DIR);
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
+  const version = pkgJson.version;
+  const zipPath = path.join(RELEASE_DIR, `alaska-court-viewer-${version}.zip`);
+
+  const output = fs.createWriteStream(zipPath);
+  const archive = archiver('zip', { zlib: { level: 9 } });
+
+  return new Promise((resolve, reject) => {
+    output.on('close', () => {
+      console.log(`Extension bundled: ${zipPath} (${archive.pointer()} bytes)`);
+      resolve();
+    });
+    archive.on('error', reject);
+    archive.pipe(output);
+    archive.directory(DIST + '/', false);
+    archive.finalize();
+  });
+}
+
+if (process.argv[2] === 'bundle') {
+  bundleForRelease().catch(err => {
+    console.error('Bundle failed:', err);
+    process.exit(1);
+  });
+}
