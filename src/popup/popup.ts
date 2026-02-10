@@ -89,7 +89,7 @@ function bindEventListeners(): void {
 
   // Add Case button
   addCaseBtn.addEventListener("click", () => {
-    showModal("add");
+    showModal("add", undefined, searchInput.value.trim());
   });
 
   // Scrape All button
@@ -342,13 +342,13 @@ function openInTab(): void {
 // ---------------------------------------------------------------------------
 // Modal
 // ---------------------------------------------------------------------------
-function showModal(mode: "add" | "edit", caseData?: Case): void {
+function showModal(mode: "add" | "edit", caseData?: Case, prefilledCaseId?: string): void {
   clearValidationErrors();
 
   if (mode === "add") {
     modalTitle.textContent = "Add Case";
     editingCaseId = null;
-    caseIdInput.value = "";
+    caseIdInput.value = prefilledCaseId || "";
     caseIdInput.disabled = false;
     clientNameInput.value = "";
     notesInput.value = "";
