@@ -154,7 +154,7 @@ function bindEventListeners(): void {
 
     switch (action) {
       case "scrape":
-        scrapeCase(caseId);
+        scrapeCase(caseId, e.shiftKey);
         break;
       case "edit":
         editCase(caseId);
@@ -246,7 +246,7 @@ function renderTable(): void {
 
     // Next court date
     const tdDate = document.createElement("td");
-    tdDate.innerHTML = formatCourtDate(c.nextCourtDate);
+    tdDate.innerHTML = formatCourtDateTime(c.nextCourtDateTime);
     tr.appendChild(tdDate);
 
     // Last scraped
@@ -304,9 +304,8 @@ function updateSortIndicators(): void {
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
-function scrapeCase(id: string): void {
-  chrome.runtime.sendMessage({ type: "START_SCRAPE", caseId: id });
-  // Optimistically mark as scraping in the UI
+function scrapeCase(id: string, keepTabOpen = false): void {
+  chrome.runtime.sendMessage({ type: "START_SCRAPE", caseId: id, keepTabOpen });
   activeScrapes[id] = "init";
   renderTable();
 }
@@ -331,6 +330,7 @@ function confirmDeleteCase(id: string): void {
 function previewCase(id: string): void {
   const c = cases.find((x) => x.id === id);
   if (!c || !c.scrapedHtml) return;
+  console.debug("Previewing scraped HTML for case", c.scrapedHtml.slice(0, 100));
   const blob = new Blob([c.scrapedHtml], { type: "text/html" });
   const url = URL.createObjectURL(blob);
   chrome.tabs.create({ url });
@@ -417,7 +417,7 @@ async function handleSave(): Promise<void> {
       clientName,
       notes,
       lastScraped: null,
-      nextCourtDate: null,
+      nextCourtDateTime: null,
       scrapedHtml: null,
     };
     await addCase(newCase);
@@ -527,27 +527,39 @@ function formatRelativeTime(isoString: string): string {
   return `${years} year${years !== 1 ? "s" : ""} ago`;
 }
 
-function formatCourtDate(dateStr: string | null): string {
-  if (!dateStr) return "\u2014";
+/** Format a datetime string like "2024-07-15T14:30:00" as "Jul 15 (year), 8:30 AM" and highlight if within 7 days
+ * 
+ * If the year is the current year, it will be omitted for brevity.
+*/
+function formatCourtDateTime(datetimeStr: string | null): string {
+  if (!datetimeStr) return "\u2014";
 
-  // Try to parse the date
-  const date = new Date(dateStr);
+  const date = new Date(datetimeStr);
   if (isNaN(date.getTime())) {
-    // If it doesn't parse as a date, return the raw string (it may already be readable)
-    return escapeHtml(dateStr);
+    return escapeHtml(datetimeStr);
   }
 
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
 
-  const formatted = date.toLocaleDateString("en-US", {
+  const currentYear = now.getFullYear();
+  const dateYear = date.getFullYear();
+
+  const datePart = date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    year: dateYear === currentYear ? undefined : "numeric",
   });
 
-  // Highlight if within 7 days (and in the future)
+  const timePart = date.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  const formatted = `${datePart}, ${timePart}`;
+
   if (diffDays >= 0 && diffDays <= 7) {
     return `<span class="upcoming">${escapeHtml(formatted)}</span>`;
   }

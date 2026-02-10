@@ -120,8 +120,7 @@ function processScrapeQueue(): void {
  * Begin scraping a single case. Opens a new background tab to the court URL,
  * registers the job, and sets a safety timeout.
  */
-async function startScrapeForCase(caseId: string): Promise<void> {
-  // Don't start a duplicate scrape for the same case.
+async function startScrapeForCase(caseId: string, keepTabOpen = false): Promise<void> {
   if (tabByCaseId.has(caseId)) {
     log(`Scrape already in progress for case ${caseId}, skipping.`);
     return;
@@ -147,6 +146,7 @@ async function startScrapeForCase(caseId: string): Promise<void> {
     caseId,
     tabId,
     state: "init",
+    keepTabOpen,
   };
 
   jobsByTab.set(tabId, job);
@@ -181,11 +181,11 @@ chrome.runtime.onMessage.addListener(
       // ----- Messages from popup -----
 
       case "START_SCRAPE": {
-        const { caseId } = message;
-        startScrapeForCase(caseId).then(() => {
+        const { caseId, keepTabOpen } = message;
+        startScrapeForCase(caseId, keepTabOpen).then(() => {
           sendResponse({ ok: true });
         });
-        return true; // async sendResponse
+        return true;
       }
 
       case "SCRAPE_ALL": {
@@ -315,7 +315,7 @@ function handleScraperReady(
     case "unknown":
       warn(
         `SCRAPER_READY: unknown page type for tab ${tabId} (${url}). ` +
-          "Content script may need to wait and re-detect.",
+        "Content script may need to wait and re-detect.",
       );
       // Don't send a command; the content script will re-try or time out.
       break;
@@ -332,29 +332,30 @@ async function handleScrapeResult(
   sender: chrome.runtime.MessageSender,
 ): Promise<void> {
   const tabId = sender.tab?.id;
-  const { caseId, nextCourtDate, html } = message;
+  const { caseId, nextCourtDateTime, html } = message;
 
-  log(`SCRAPE_RESULT: case=${caseId}, nextCourtDate=${nextCourtDate}`);
+  log(`SCRAPE_RESULT: case=${caseId}, nextCourtDate=${nextCourtDateTime}`);
 
   // Persist to storage.
   try {
     await updateCase(caseId, {
       lastScraped: new Date().toISOString(),
-      nextCourtDate,
+      nextCourtDateTime,
       scrapedHtml: html,
     });
   } catch (err) {
     warn(`Failed to persist scrape result for case ${caseId}:`, err);
   }
 
-  // Clean up the job.
   if (tabId !== undefined) {
     const job = jobsByTab.get(tabId);
     if (job) {
       job.state = "done";
+      if (!job.keepTabOpen) {
+        // await safeCloseTab(tabId);
+      }
     }
     cleanupJob(tabId);
-    await safeCloseTab(tabId);
   }
 
   // Kick off the next queued scrape if any.
@@ -378,9 +379,11 @@ async function handleScrapeError(
     if (job) {
       job.state = "error";
       job.error = error;
+      if (!job.keepTabOpen) {
+        await safeCloseTab(tabId);
+      }
     }
     cleanupJob(tabId);
-    await safeCloseTab(tabId);
   }
 
   processScrapeQueue();
