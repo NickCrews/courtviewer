@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alaska Court Viewer</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <header class="header">
+    <h1>Alaska Court Viewer</h1>
+  </header>
+
+  <div class="controls-bar">
+    <input
+      type="text"
+      id="searchInput"
+      class="search-input"
+      placeholder="Search cases..."
+      autocomplete="off"
+    >
+    <button id="addCaseBtn" class="btn btn-primary">+ Add Case</button>
+    <button id="scrapeAllBtn" class="btn btn-scrape-all">Scrape All</button>
+  </div>
+
+  <table id="casesTable" class="cases-table">
+    <thead>
+      <tr>
+        <th data-sort="clientName" class="sortable">Client <span class="sort-arrow"></span></th>
+        <th data-sort="id" class="sortable">Case ID <span class="sort-arrow"></span></th>
+        <th data-sort="nextCourtDate" class="sortable">Next Court Date <span class="sort-arrow"></span></th>
+        <th data-sort="lastScraped" class="sortable">Last Scraped <span class="sort-arrow"></span></th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="casesBody"></tbody>
+  </table>
+
+  <div id="emptyState" class="empty-state" hidden>
+    <div class="empty-state-icon">&#128194;</div>
+    <p class="empty-state-title">No cases tracked yet</p>
+    <p class="empty-state-subtitle">Click "Add Case" to start tracking Alaska court cases.</p>
+  </div>
+
+  <!-- Add / Edit Modal -->
+  <div id="caseModal" class="modal-overlay" hidden>
+    <div class="modal-card">
+      <h2 id="modalTitle" class="modal-title">Add Case</h2>
+      <form id="caseForm" class="modal-form">
+        <div class="form-group">
+          <label for="caseIdInput">Case Number</label>
+          <input
+            type="text"
+            id="caseIdInput"
+            placeholder="3AN-24-00123CR"
+            autocomplete="off"
+            required
+          >
+        </div>
+        <div class="form-group">
+          <label for="clientNameInput">Client Name</label>
+          <input
+            type="text"
+            id="clientNameInput"
+            placeholder="Last, First"
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-group">
+          <label for="notesInput">Notes</label>
+          <textarea id="notesInput" rows="3" placeholder="Optional notes..."></textarea>
+        </div>
+        <div class="modal-actions">
+          <button type="button" id="cancelBtn" class="btn btn-cancel">Cancel</button>
+          <button type="submit" id="saveBtn" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Preview Modal -->
+  <div id="previewModal" class="modal-overlay" hidden>
+    <div class="modal-card modal-card-preview">
+      <div class="preview-header">
+        <h2 class="modal-title">Case Preview</h2>
+        <button id="closePreviewBtn" class="btn btn-cancel btn-close">&times;</button>
+      </div>
+      <iframe id="previewFrame" class="preview-iframe" sandbox="allow-same-origin"></iframe>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <a href="#" id="openInTabLink" class="footer-link">Open in full tab</a>
+  </footer>
+
+  <script type="module" src="popup.js"></script>
+</body>
+</html>
