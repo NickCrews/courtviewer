@@ -5,7 +5,7 @@
  * Detects the current page type, reports readiness to the background service
  * worker, and executes scraping commands it receives back.
  *
- * IMPORTANT: This file MUST be self-contained with NO imports. Chrome
+ * IMPORTANT: This file MUST be self-contained with NO imports at runtime. Chrome
  * extension content scripts cannot use ES modules. All type definitions
  * needed are inlined below.
  */
@@ -293,7 +293,9 @@
    * Parse the current page immediately for results.
    */
   function handleParseResults(caseId: string): void {
-    parseResults(caseId);
+    parseResults(caseId).catch((err) => {
+      warn("Error in handleParseResults:", err);
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -352,7 +354,9 @@
       if (hasResultsContent()) {
         clearInterval(intervalId);
         log("Results content detected after form submission.");
-        parseResults(caseId);
+        parseResults(caseId).catch((err) => {
+          warn("Error in parseResults:", err);
+        });
         return;
       }
 
@@ -361,7 +365,9 @@
       if (!caseInput && hasResultsContent()) {
         clearInterval(intervalId);
         debug("Page changed to results view");
-        parseResults(caseId);
+        parseResults(caseId).catch((err) => {
+          warn("Error in parseResults:", err);
+        });
         return;
       }
     }, POLL_INTERVAL_MS);
@@ -371,7 +377,7 @@
    * Parse the current page for case detail information and send the result
    * back to the background service worker.
    */
-  function parseResults(caseId: string): void {
+  async function parseResults(caseId: string): Promise<void> {
     debug(`Parsing results for case: ${caseId}`);
     try {
       const errorEl = document.querySelector(
@@ -396,7 +402,7 @@
 
       debug("No detail link found, parsing current page");
       const nextCourtDateTime = findNextCourtDateTime();
-      const html = captureHtml();
+      const html = await captureHtml();
       debug(`HTML captured: ${html.length} characters`);
 
       log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}`);
@@ -713,17 +719,126 @@
 
   /**
    * Capture the relevant HTML from the current page for later preview.
+   * Inlines all external resources (CSS, images, scripts) to make the HTML self-contained.
    */
-  function captureHtml(): string {
-    console.debug("Capturing HTML content of the page");
-    console.log(document.documentElement);
-    console.log(document.documentElement.outerHTML.substring(0, 500));
-    const html = document.documentElement.outerHTML;
-    const MAX_HTML_LENGTH = 500_000;
-    if (html.length > MAX_HTML_LENGTH) {
-      return html.substring(0, MAX_HTML_LENGTH) + "\n<!-- truncated -->";
-    }
+  async function captureHtml(): Promise<string> {
+    debug("Capturing and inlining HTML content");
+    const clonedDoc = document.cloneNode(true) as Document;
+    await inlineResources(clonedDoc);
+    const html = clonedDoc.documentElement.outerHTML;
     return html;
+  }
+
+  /**
+   * Inline all external resources in a cloned document to make it self-contained.
+   */
+  async function inlineResources(doc: Document): Promise<void> {
+    debug("Starting resource inlining");
+    debug(doc.documentElement.outerHTML);
+    await Promise.all([
+      inlineStylesheets(doc),
+      inlineImages(doc),
+      inlineScripts(doc),
+    ]);
+    debug("Resource inlining complete");
+    debug(doc.documentElement.outerHTML);
+  }
+
+  /**
+   * Inline all external stylesheets by fetching them and converting to <style> tags.
+   */
+  async function inlineStylesheets(doc: Document): Promise<void> {
+    const links = doc.querySelectorAll('link[rel="stylesheet"]');
+    debug(`Inlining ${links.length} stylesheets`);
+    const promises: Promise<void>[] = [];
+    for (const link of links) {
+      const href = (link as HTMLLinkElement).href;
+      if (!href) continue;
+      promises.push(
+        (async () => {
+          try {
+            const response = await fetch(href);
+            const css = await response.text();
+            const escapedCss = css.replace(/<\/style>/gi, "<\\/style>");
+            const styleTag = doc.createElement("style");
+            styleTag.textContent = escapedCss;
+            link.parentNode?.replaceChild(styleTag, link);
+            debug(`Inlined stylesheet: ${href.substring(0, 50)}`);
+          } catch (err) {
+            debug(`Failed to inline stylesheet ${href}:`, err);
+          }
+        })()
+      );
+    }
+    await Promise.all(promises);
+  }
+
+  /**
+   * Inline all external images by converting them to data URLs.
+   */
+  async function inlineImages(doc: Document): Promise<void> {
+    const images = doc.querySelectorAll("img[src]");
+    debug(`Inlining ${images.length} images`);
+    const promises: Promise<void>[] = [];
+    for (const img of images) {
+      const src = (img as HTMLImageElement).src;
+      if (!src || src.startsWith("data:")) continue;
+      promises.push(
+        (async () => {
+          try {
+            const response = await fetch(src);
+            const blob = await response.blob();
+            const dataUrl = await blobToDataUrl(blob);
+            (img as HTMLImageElement).src = dataUrl;
+            debug(`Inlined image: ${src.substring(0, 50)}`);
+          } catch (err) {
+            debug(`Failed to inline image ${src}:`, err);
+          }
+        })()
+      );
+    }
+    await Promise.all(promises);
+  }
+
+  /**
+   * Inline external scripts by fetching them and converting to inline <script> tags.
+   */
+  async function inlineScripts(doc: Document): Promise<void> {
+    const scripts = doc.querySelectorAll("script[src]");
+    debug(`Inlining ${scripts.length} scripts`);
+    const promises: Promise<void>[] = [];
+    for (const script of scripts) {
+      const src = (script as HTMLScriptElement).src;
+      if (!src) continue;
+      promises.push(
+        (async () => {
+          try {
+            const response = await fetch(src);
+            const js = await response.text();
+            const escapedJs = js.replace(/<\/script>/gi, "<\\/script>");
+            const inlineScript = doc.createElement("script");
+            inlineScript.textContent = escapedJs;
+            script.parentNode?.replaceChild(inlineScript, script);
+            debug(`Inlined script: ${src.substring(0, 50)}`);
+          } catch (err) {
+            debug(`Failed to inline script ${src}:`, err);
+          }
+        })()
+      );
+    }
+    await Promise.all(promises);
+  }
+
+  /**
+   * Convert a Blob to a data URL.
+   */
+  function blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
   }
 
   // -----------------------------------------------------------------------
@@ -790,7 +905,7 @@
 
         case "PARSE_RESULTS": {
           handleParseResults(message.caseId);
-          debug("PARSE_RESULTS completed");
+          debug("PARSE_RESULTS initiated");
           sendResponse({ ok: true });
           return false;
         }
