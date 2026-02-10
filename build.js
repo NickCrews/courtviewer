@@ -127,12 +127,12 @@ copyFile(
 );
 console.log('  Copied popup assets');
 
-// 3. Copy icons/ to dist/icons/
+// 3. Copy assets/ to dist/assets/
 copyDirRecursive(
-  path.join(__dirname, 'icons'),
-  path.join(DIST, 'icons')
+  path.join(__dirname, 'assets'),
+  path.join(DIST, 'assets')
 );
-console.log('  Copied icons');
+console.log('  Copied assets');
 
 // 4. Generate placeholder PNG icons if they don't already exist
 const iconDir = path.join(DIST, 'icons');
