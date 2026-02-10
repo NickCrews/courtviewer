@@ -331,8 +331,9 @@ function confirmDeleteCase(id: string): void {
 function previewCase(id: string): void {
   const c = cases.find((x) => x.id === id);
   if (!c || !c.scrapedHtml) return;
-  previewFrame.srcdoc = c.scrapedHtml;
-  previewModal.hidden = false;
+  const blob = new Blob([c.scrapedHtml], { type: "text/html" });
+  const url = URL.createObjectURL(blob);
+  chrome.tabs.create({ url });
 }
 
 function openInTab(): void {
