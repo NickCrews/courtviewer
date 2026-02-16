@@ -40,11 +40,11 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 
 ### Looking Up Case Information
 
-- Click **"Scrape Now"** next to any individual case to look up its latest information from CourtView.
+- Click **"Scrape"** next to any individual case to look up its latest information from CourtView and save it locally.
 - Click **"Scrape All"** to look up all of your cases at once. The extension opens background tabs to check each case on the CourtView website.
 - The extension will automatically navigate the CourtView website, search for the case, and extract the next court date.
 - Results appear in the table once the lookup is complete.
-- Click **"Preview"** to see the full case detail page exactly as it appeared on CourtView.
+- Click **"Open"** to open a live tab with the current case information directly from CourtView. This does not update your saved data.
 
 ### Editing and Deleting Cases
 
@@ -64,7 +64,7 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 - **Clearing Chrome's browsing data** (specifically the "Extensions" category) will delete your Court Viewer data.
 - **Uninstalling the extension** will permanently delete all stored data.
 - There is **no automatic backup.** Consider periodically writing down critical case information elsewhere as a safeguard.
-- Scraped HTML pages are saved locally so that you can preview them later. This means storage usage grows as you add and scrape more cases, but everything stays on your machine.
+- When you click **"Scrape"**, the extension saves the case details and next court date to your local storage. When you click **"Open"**, the extension accesses live data without saving it, allowing you to view the most current information.
 
 ---
 
