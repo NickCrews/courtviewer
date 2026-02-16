@@ -27,14 +27,14 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 
 1. Click the Alaska Court Viewer icon in your Chrome toolbar. A popup window will appear.
 2. Click **"Add Case."**
-3. Enter the case number (for example, `3AN-24-00123CR`), the client name, and any notes you would like to save.
+3. Enter the case number (for example, `3AN-24-00123CR`), the defendant name, and any notes you would like to save.
 4. Click **Save.**
 
 ### Viewing Your Cases
 
 - All of your cases are displayed in a table inside the popup.
 - **Sort** by clicking any column header. Click the same header again to reverse the sort order.
-- **Search** using the search bar to filter by client name, case ID, or notes.
+- **Search** using the search bar to filter by defendant name, case ID, or notes.
 - The **"Next Court Date"** column shows the next upcoming hearing date for each case.
 - The **"Last Scraped"** column shows when the extension last looked up information for that case on CourtView.
 
@@ -48,7 +48,7 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 
 ### Editing and Deleting Cases
 
-- Click **"Edit"** next to a case to change its client name or notes.
+- Click **"Edit"** next to a case to change its defendant name or notes.
 - Click **"Delete"** to remove a case. This also removes any scraped data that was saved for that case.
 
 ---
@@ -57,7 +57,7 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 
 **This is important information about your data:**
 
-- All case data (case numbers, client names, notes, and scraped court information) is stored **locally in your Chrome browser** using Chrome's built-in storage. Nothing is sent anywhere else.
+- All case data (case numbers, defendant names, notes, and scraped court information) is stored **locally in your Chrome browser** using Chrome's built-in storage. Nothing is sent anywhere else.
 - Your data **never leaves your computer.** It is not sent to any server, cloud service, or third party.
 - Your data persists across browser restarts and computer reboots. You do not need to save manually.
 - Your data is tied to your **Chrome profile.** If you use multiple Chrome profiles, each one has its own separate set of data.

@@ -1,6 +1,6 @@
 export interface Case {
   id: string;
-  clientName: string;
+  defendantName: string;
   notes: string;
   lastScraped: string | null;
   nextCourtDateTime: string | null;

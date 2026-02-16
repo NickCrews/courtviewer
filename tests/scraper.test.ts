@@ -400,7 +400,7 @@ test.describe.serial("Court Website Navigation", () => {
       });
       console.log(
         "[test] Form elements found:\n" +
-          JSON.stringify(formElements, null, 2)
+        JSON.stringify(formElements, null, 2)
       );
 
       // Enumerate all tables.
@@ -418,7 +418,7 @@ test.describe.serial("Court Website Navigation", () => {
       });
       console.log(
         "[test] Table structures found:\n" +
-          JSON.stringify(tables, null, 2)
+        JSON.stringify(tables, null, 2)
       );
 
       // Enumerate links in any navigation/sidebar.
@@ -433,7 +433,7 @@ test.describe.serial("Court Website Navigation", () => {
       });
       console.log(
         "[test] Navigation/sidebar links:\n" +
-          JSON.stringify(navLinks, null, 2)
+        JSON.stringify(navLinks, null, 2)
       );
 
       await takeDebugScreenshot(diagPage, "04-page-elements");
@@ -620,11 +620,11 @@ test.describe("Extension Integration", () => {
 
       // Step 2: Fill in the case number.
       const testCaseId = "3AN-24-09999CR";
-      const testClientName = "Doe, Jane";
-      console.log(`[test] Filling case: ${testCaseId}, client: ${testClientName}`);
+      const testDefendantName = "Doe, Jane";
+      console.log(`[test] Filling case: ${testCaseId}, defendant: ${testDefendantName}`);
 
       await popupPage.locator("#caseIdInput").fill(testCaseId);
-      await popupPage.locator("#clientNameInput").fill(testClientName);
+      await popupPage.locator("#defendantNameInput").fill(testDefendantName);
       await popupPage.locator("#notesInput").fill("Test case added by Playwright");
 
       await takeDebugScreenshot(popupPage, "06-add-case-filled");
@@ -647,10 +647,10 @@ test.describe("Extension Integration", () => {
       console.log(`[test] Table rows after adding case: ${rowCount}`);
       expect(rowCount).toBeGreaterThanOrEqual(1);
 
-      // Check that our case ID and client name appear in the table.
+      // Check that our case ID and defendant name appear in the table.
       const tableHtml = await tableBody.innerHTML();
       expect(tableHtml).toContain(testCaseId);
-      expect(tableHtml).toContain(testClientName);
+      expect(tableHtml).toContain(testDefendantName);
 
       console.log("[test] Case successfully added and displayed.");
       await takeDebugScreenshot(popupPage, "06-add-case-result");
@@ -809,7 +809,7 @@ test.describe("HTML Parsing Validation", () => {
 
     console.log(
       "[test] Extracted dates:\n" +
-        JSON.stringify(extractedDates, null, 2)
+      JSON.stringify(extractedDates, null, 2)
     );
 
     // -----------------------------------------------------------------------
