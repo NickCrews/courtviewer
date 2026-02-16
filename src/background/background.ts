@@ -130,7 +130,7 @@ async function startScrapeForCase(caseId: string, keepTabOpen = false): Promise<
 
   let tab: chrome.tabs.Tab;
   try {
-    tab = await chrome.tabs.create({ url: COURT_URL, active: false });
+    tab = await chrome.tabs.create({ url: COURT_URL, active: keepTabOpen });
   } catch (err) {
     warn(`Failed to create tab for case ${caseId}:`, err);
     return;
@@ -336,24 +336,22 @@ async function handleScrapeResult(
 
   log(`SCRAPE_RESULT: case=${caseId}, nextCourtDate=${nextCourtDateTime}`);
 
-  // Persist to storage.
-  try {
-    await updateCase(caseId, {
-      lastScraped: new Date().toISOString(),
-      nextCourtDateTime,
-      scrapedHtml: html,
-    });
-  } catch (err) {
-    warn(`Failed to persist scrape result for case ${caseId}:`, err);
-  }
-
   if (tabId !== undefined) {
     const job = jobsByTab.get(tabId);
-    if (job) {
-      job.state = "done";
-      if (!job.keepTabOpen) {
-        // await safeCloseTab(tabId);
+    if (job && !job.keepTabOpen) {
+      // Only persist to storage when not opening in a live tab
+      try {
+        await updateCase(caseId, {
+          lastScraped: new Date().toISOString(),
+          nextCourtDateTime,
+          scrapedHtml: html,
+        });
+      } catch (err) {
+        warn(`Failed to persist scrape result for case ${caseId}:`, err);
       }
+      job.state = "done";
+    } else if (job) {
+      job.state = "done";
     }
     cleanupJob(tabId);
   }

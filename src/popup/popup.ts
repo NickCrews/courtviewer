@@ -154,16 +154,16 @@ function bindEventListeners(): void {
 
     switch (action) {
       case "scrape":
-        scrapeCase(caseId, e.shiftKey);
+        scrapeCase(caseId, false);
+        break;
+      case "open":
+        scrapeCase(caseId, true);
         break;
       case "edit":
         editCase(caseId);
         break;
       case "delete":
         confirmDeleteCase(caseId);
-        break;
-      case "preview":
-        previewCase(caseId);
         break;
     }
   });
@@ -285,9 +285,8 @@ function buildActionButtons(c: Case): string {
   let html = `<button class="btn btn-sm btn-outline" data-action="scrape" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${scrapeLabel}</button>`;
   html += `<button class="btn btn-sm btn-outline" data-action="edit" data-case-id="${escapeHtml(c.id)}">Edit</button>`;
   html += `<button class="btn btn-sm btn-danger" data-action="delete" data-case-id="${escapeHtml(c.id)}">Delete</button>`;
-  if (c.scrapedHtml) {
-    html += `<button class="btn btn-sm btn-outline" data-action="preview" data-case-id="${escapeHtml(c.id)}">Preview</button>`;
-  }
+  const openLabel = activeScrapes[c.id] ? "Opening..." : "Open";
+  html += `<button class="btn btn-sm btn-outline" data-action="open" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${openLabel}</button>`;
   return html;
 }
 
@@ -325,15 +324,6 @@ function confirmDeleteCase(id: string): void {
     cases = await getCases();
     renderTable();
   });
-}
-
-function previewCase(id: string): void {
-  const c = cases.find((x) => x.id === id);
-  if (!c || !c.scrapedHtml) return;
-  console.debug("Previewing scraped HTML for case", c.scrapedHtml.slice(0, 100));
-  const blob = new Blob([c.scrapedHtml], { type: "text/html" });
-  const url = URL.createObjectURL(blob);
-  chrome.tabs.create({ url });
 }
 
 function openInTab(): void {
