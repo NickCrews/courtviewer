@@ -20,7 +20,7 @@ import type {
   BackgroundCommand,
   ScrapeStatusResponse,
 } from "../types.js";
-import { getCases, updateCase } from "../storage.js";
+import { getCases, updateCase, getCase } from "../storage.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -332,21 +332,34 @@ async function handleScrapeResult(
   sender: chrome.runtime.MessageSender,
 ): Promise<void> {
   const tabId = sender.tab?.id;
-  const { caseId, nextCourtDateTime, html } = message;
+  const { caseId, nextCourtDateTime, html, prosecutor, defendant } = message;
 
-  log(`SCRAPE_RESULT: case=${caseId}, nextCourtDate=${nextCourtDateTime}`);
+  log(`SCRAPE_RESULT: case=${caseId}, nextCourtDate=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
 
   if (tabId !== undefined) {
     const job = jobsByTab.get(tabId);
     if (job) {
       if (!job.keepTabOpen) {
-        // Only persist to storage when not opening in a live tab
         try {
-          await updateCase(caseId, {
+          const existingCase = await getCase(caseId);
+          const updates: {
+            lastScraped: string;
+            nextCourtDateTime: string | null;
+            scrapedHtml: string | null;
+            prosecutor?: string;
+            defendantName?: string;
+          } = {
             lastScraped: new Date().toISOString(),
             nextCourtDateTime,
             scrapedHtml: html,
-          });
+          };
+          if (prosecutor && (!existingCase?.prosecutor || existingCase.prosecutor === "")) {
+            updates.prosecutor = prosecutor;
+          }
+          if (defendant && (!existingCase?.defendantName || existingCase.defendantName === "")) {
+            updates.defendantName = defendant;
+          }
+          await updateCase(caseId, updates);
         } catch (err) {
           warn(`Failed to persist scrape result for case ${caseId}:`, err);
         }
@@ -357,7 +370,6 @@ async function handleScrapeResult(
     cleanupJob(tabId);
   }
 
-  // Kick off the next queued scrape if any.
   processScrapeQueue();
 }
 

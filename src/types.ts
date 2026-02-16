@@ -1,6 +1,7 @@
 export interface Case {
   id: string;
   defendantName: string;
+  prosecutor: string | null;
   notes: string;
   lastScraped: string | null;
   nextCourtDateTime: string | null;
@@ -24,7 +25,7 @@ export type PopupMessage =
 // Messages from content script -> background
 export type ContentMessage =
   | { type: "SCRAPER_READY"; pageType: "welcome" | "search" | "results" | "unknown"; url: string }
-  | { type: "SCRAPE_RESULT"; caseId: string; nextCourtDateTime: string | null; html: string }
+  | { type: "SCRAPE_RESULT"; caseId: string; nextCourtDateTime: string | null; html: string; prosecutor: string | null; defendant: string | null }
   | { type: "SCRAPE_ERROR"; caseId: string; error: string };
 
 // Messages from background -> content script

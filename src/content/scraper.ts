@@ -28,6 +28,8 @@
     caseId: string;
     nextCourtDateTime: string | null;
     html: string;
+    prosecutor: string | null;
+    defendant: string | null;
   }
 
   interface ScrapeErrorMessage {
@@ -402,12 +404,13 @@
 
       debug("No detail link found, parsing current page");
       const nextCourtDateTime = findNextCourtDateTime();
+      const { prosecutor, defendant } = extractCaseParties(caseId);
       const html = await captureHtml();
       debug(`HTML captured: ${html.length} characters`);
 
-      log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}`);
+      log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
 
-      sendScrapeResult(caseId, nextCourtDateTime, html);
+      sendScrapeResult(caseId, nextCourtDateTime, html, prosecutor, defendant);
     } catch (err) {
       warn("Error during parseResults:", err);
       debug("Error stack:", err instanceof Error ? err.stack : "N/A");
@@ -416,6 +419,44 @@
         err instanceof Error ? err.message : String(err),
       );
     }
+  }
+
+  /**
+   * Extract prosecutor and defendant from page elements.
+   * Looks for elements with text like "Baker, Ryan Craig - Defendant" and "State of Alaska - Prosecution".
+   */
+  function extractCaseParties(caseId: string): { prosecutor: string | null; defendant: string | null } {
+    debug(`Extracting case parties for case: ${caseId}`);
+    let prosecutor: string | null = null;
+    let defendant: string | null = null;
+
+    const allElements = document.querySelectorAll("*");
+    for (const el of allElements) {
+      const text = (el.textContent || "").trim();
+
+      if (/\s*-\s*Defendant\s*$/i.test(text)) {
+        const match = text.match(/^(.+?)\s*-\s*Defendant\s*$/i);
+        if (match) {
+          defendant = match[1].trim();
+          debug(`Found defendant element: "${text}" -> extracted: "${defendant}"`);
+        }
+      }
+
+      if (/\s*-\s*Prosecution\s*$/i.test(text)) {
+        const match = text.match(/^(.+?)\s*-\s*Prosecution\s*$/i);
+        if (match) {
+          prosecutor = match[1].trim();
+          debug(`Found prosecutor element: "${text}" -> extracted: "${prosecutor}"`);
+        }
+      }
+
+      if (prosecutor && defendant) {
+        break;
+      }
+    }
+
+    debug(`Extracted prosecutor: "${prosecutor}", defendant: "${defendant}"`);
+    return { prosecutor, defendant };
   }
 
   /**
@@ -849,12 +890,16 @@
     caseId: string,
     nextCourtDateTime: string | null,
     html: string,
+    prosecutor: string | null,
+    defendant: string | null,
   ): void {
     const message: ScrapeResultMessage = {
       type: "SCRAPE_RESULT",
       caseId,
       nextCourtDateTime,
       html,
+      prosecutor,
+      defendant,
     };
     console.debug("Sending SCRAPE_RESULT message to background");
     console.debug(html.substring(0, 500));

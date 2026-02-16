@@ -403,6 +403,7 @@ async function handleSave(): Promise<void> {
     const newCase: Case = {
       id: rawId,
       defendantName,
+      prosecutor: null,
       notes,
       lastScraped: null,
       nextCourtDateTime: null,
