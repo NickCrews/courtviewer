@@ -338,19 +338,20 @@ async function handleScrapeResult(
 
   if (tabId !== undefined) {
     const job = jobsByTab.get(tabId);
-    if (job && !job.keepTabOpen) {
-      // Only persist to storage when not opening in a live tab
-      try {
-        await updateCase(caseId, {
-          lastScraped: new Date().toISOString(),
-          nextCourtDateTime,
-          scrapedHtml: html,
-        });
-      } catch (err) {
-        warn(`Failed to persist scrape result for case ${caseId}:`, err);
+    if (job) {
+      if (!job.keepTabOpen) {
+        // Only persist to storage when not opening in a live tab
+        try {
+          await updateCase(caseId, {
+            lastScraped: new Date().toISOString(),
+            nextCourtDateTime,
+            scrapedHtml: html,
+          });
+        } catch (err) {
+          warn(`Failed to persist scrape result for case ${caseId}:`, err);
+        }
+        await safeCloseTab(tabId);
       }
-      job.state = "done";
-    } else if (job) {
       job.state = "done";
     }
     cleanupJob(tabId);
