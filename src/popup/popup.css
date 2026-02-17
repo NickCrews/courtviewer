@@ -226,6 +226,13 @@ th.sort-desc .sort-arrow::after {
   flex-wrap: nowrap;
 }
 
+.cases-table th.actions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 /* ===== Court Date Styling ===== */
 .upcoming {
   color: #dc2626;

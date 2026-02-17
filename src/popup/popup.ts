@@ -282,11 +282,12 @@ function buildScrapedCell(c: Case): string {
 function buildActionButtons(c: Case): string {
   const scrapeLabel = activeScrapes[c.id] ? "Scraping..." : "Scrape";
   const scrapeDisabled = activeScrapes[c.id] ? "disabled" : "";
-  let html = `<button class="btn btn-sm btn-outline" data-action="scrape" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${scrapeLabel}</button>`;
+  const openLabel = activeScrapes[c.id] ? "Opening..." : "Open";
+  let html = '';
+  html += `<button class="btn btn-sm btn-outline" data-action="open" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${openLabel}</button>`;
+  html += `<button class="btn btn-sm btn-outline" data-action="scrape" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${scrapeLabel}</button>`;
   html += `<button class="btn btn-sm btn-outline" data-action="edit" data-case-id="${escapeHtml(c.id)}">Edit</button>`;
   html += `<button class="btn btn-sm btn-danger" data-action="delete" data-case-id="${escapeHtml(c.id)}">Delete</button>`;
-  const openLabel = activeScrapes[c.id] ? "Opening..." : "Open";
-  html += `<button class="btn btn-sm btn-outline" data-action="open" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${openLabel}</button>`;
   return html;
 }
 

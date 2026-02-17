@@ -20,7 +20,6 @@
       autocomplete="off"
     >
     <button id="addCaseBtn" class="btn btn-primary">+ Add Case</button>
-    <button id="scrapeAllBtn" class="btn btn-scrape-all">Scrape All</button>
   </div>
 
   <table id="casesTable" class="cases-table">
@@ -30,7 +29,7 @@
         <th data-sort="id" class="sortable">Case ID <span class="sort-arrow"></span></th>
         <th data-sort="nextCourtDateTime" class="sortable">Next Court Date <span class="sort-arrow"></span></th>
         <th data-sort="lastScraped" class="sortable">Last Scraped <span class="sort-arrow"></span></th>
-        <th>Actions</th>
+        <th class="actions-header"><div>Actions</div><button id="scrapeAllBtn" class="btn btn-scrape-all btn-sm">Scrape All</button></th>
       </tr>
     </thead>
     <tbody id="casesBody"></tbody>
