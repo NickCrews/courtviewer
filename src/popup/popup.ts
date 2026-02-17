@@ -415,6 +415,7 @@ async function handleSave(): Promise<void> {
       scrapedHtml: null,
     };
     await addCase(newCase);
+    scrapeCase(rawId, false);
   }
 
   cases = await getCases();
