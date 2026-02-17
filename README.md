@@ -21,6 +21,19 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 
 ---
 
+## Found a Bug? Have a suggestion? Other feedback?
+
+This software very well may contain bugs. If you find one, please send an
+email to nicholas.b.crews@gmail.com with
+- What happens
+- What did you expect/want to happen
+- Instructions for me to be able to reproduce the behavior on my computer
+
+If you have other suggestions for new features or other changes, I'd like to hear
+that as well.
+
+---
+
 ## How to Use
 
 ### Adding Cases
