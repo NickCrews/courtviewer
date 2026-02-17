@@ -30,6 +30,7 @@ let caseForm: HTMLFormElement;
 let caseIdInput: HTMLInputElement;
 let defendantNameInput: HTMLInputElement;
 let notesInput: HTMLTextAreaElement;
+let saveBtn: HTMLButtonElement;
 let cancelBtn: HTMLButtonElement;
 let previewModal: HTMLDivElement;
 let closePreviewBtn: HTMLButtonElement;
@@ -53,6 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   defendantNameInput = document.getElementById("defendantNameInput") as HTMLInputElement;
   notesInput = document.getElementById("notesInput") as HTMLTextAreaElement;
   cancelBtn = document.getElementById("cancelBtn") as HTMLButtonElement;
+  saveBtn = document.getElementById("saveBtn") as HTMLButtonElement;
   previewModal = document.getElementById("previewModal") as HTMLDivElement;
   closePreviewBtn = document.getElementById("closePreviewBtn") as HTMLButtonElement;
   previewFrame = document.getElementById("previewFrame") as HTMLIFrameElement;
@@ -339,6 +341,7 @@ function showModal(mode: "add" | "edit", caseData?: Case, prefilledCaseId?: stri
 
   if (mode === "add") {
     modalTitle.textContent = "Add Case";
+    saveBtn.textContent = "Add";
     editingCaseId = null;
     caseIdInput.value = prefilledCaseId || "";
     caseIdInput.disabled = false;
@@ -346,6 +349,7 @@ function showModal(mode: "add" | "edit", caseData?: Case, prefilledCaseId?: stri
     notesInput.value = "";
   } else if (mode === "edit" && caseData) {
     modalTitle.textContent = "Edit Case";
+    saveBtn.textContent = "Save";
     editingCaseId = caseData.id;
     caseIdInput.value = caseData.id;
     caseIdInput.disabled = true;
