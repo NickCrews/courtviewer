@@ -2,8 +2,9 @@
   "manifest_version": 3,
   "name": "Alaska Court Viewer",
   "version": "1.0.0",
-  "description": "Chrome extension for tracking Alaska court cases",
-  "permissions": ["storage", "tabs", "scripting"],
+  "description": "Track your CourtView cases",
+  "homepage_url": "https://github.com/NickCrews/courtviewer",
+  "permissions": ["storage", "tabs"],
   "host_permissions": ["https://records.courts.alaska.gov/*"],
   "background": {
     "service_worker": "background/background.js",
