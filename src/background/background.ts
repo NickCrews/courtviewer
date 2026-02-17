@@ -1,16 +1,20 @@
 /**
  * Background service worker for the Alaska Court Viewer Chrome extension.
+ * 
+ * There is one instance of this script for the entire extension.
  *
  * Orchestrates scraping of court records from
  * https://records.courts.alaska.gov/eaccess/ by:
  *   - Opening tabs to the court website
- *   - Communicating with the content script to navigate through pages
+ *   - Each of these tabs has its own content script instance which performs the actual scraping
+ *   - This background script delegates to content scripts via messages
+ *     and listens for their responses to track progress and results.
  *   - Storing scraped results in chrome.storage
  *
  * Message flow:
- *   Popup  -> Background (START_SCRAPE | SCRAPE_ALL | GET_SCRAPE_STATUS)
- *   Content -> Background (SCRAPER_READY | SCRAPE_RESULT | SCRAPE_ERROR)
- *   Background -> Content  (CLICK_SEARCH_CASES | FILL_AND_SEARCH | PARSE_RESULTS)
+ *   Popup -> Background (START_SCRAPE | SCRAPE_ALL | GET_SCRAPE_STATUS)
+ *   Background -> Content  (BEGIN_SCRAPE)
+ *   Content -> Background (SCRAPE_STATE_CHANGE)
  */
 
 import type {
@@ -19,6 +23,7 @@ import type {
   ContentMessage,
   BackgroundCommand,
   ScrapeStatusResponse,
+  ISODateString,
 } from "../types.js";
 import { getCases, updateCase, getCase } from "../storage.js";
 
@@ -27,7 +32,7 @@ import { getCases, updateCase, getCase } from "../storage.js";
 // ---------------------------------------------------------------------------
 
 /** Entry URL for the Alaska court records site. */
-const COURT_URL = "https://records.courts.alaska.gov/eaccess/search.page.3";
+const COURT_URL = "https://records.courts.alaska.gov/eaccess/search.page";
 
 /** Maximum number of concurrent scrape tabs. */
 const MAX_CONCURRENT = 3;
@@ -36,7 +41,7 @@ const MAX_CONCURRENT = 3;
 const JOB_TIMEOUT_MS = 60_000;
 
 /** Stagger delay between launching successive scrape tabs (ms). */
-const STAGGER_DELAY_MS = 500;
+const STAGGER_DELAY_MS = 100;
 
 // ---------------------------------------------------------------------------
 // State
@@ -70,6 +75,10 @@ function warn(...args: unknown[]): void {
   console.warn("[CourtViewer:bg]", ...args);
 }
 
+function nowIso(): ISODateString {
+  return new Date().toISOString() as ISODateString;
+}
+
 /**
  * Remove all traces of a job (maps, timers) for the given tab.
  * Safe to call multiple times for the same tabId.
@@ -97,6 +106,26 @@ async function safeCloseTab(tabId: number): Promise<void> {
   } catch {
     // Tab may already be closed; that's fine.
   }
+}
+
+function waitForTabComplete(tabId: number): Promise<void> {
+  return new Promise((resolve) => {
+    chrome.tabs.get(tabId, (tab) => {
+      if (tab?.status === "complete") {
+        resolve();
+        return;
+      }
+
+      const listener = (updatedTabId: number, info: chrome.tabs.TabChangeInfo) => {
+        if (updatedTabId === tabId && info.status === "complete") {
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      };
+
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+  });
 }
 
 /**
@@ -145,25 +174,70 @@ async function startScrapeForCase(caseId: string, keepTabOpen = false): Promise<
   const job: ScrapeJob = {
     caseId,
     tabId,
-    state: "init",
     keepTabOpen,
+    timestampStarted: nowIso(),
+    state: { state: "running" },
   };
 
   jobsByTab.set(tabId, job);
   tabByCaseId.set(caseId, tabId);
 
+  beginScrapeInTab(tabId, caseId, keepTabOpen).catch((err) => {
+    warn(`Failed to start scrape in tab ${tabId} for case ${caseId}:`, err);
+  });
+
   // Safety timeout: if the scrape hasn't finished within JOB_TIMEOUT_MS,
   // treat it as an error and clean up.
   const timer = setTimeout(async () => {
     const staleJob = jobsByTab.get(tabId);
-    if (staleJob && staleJob.state !== "done") {
-      warn(`Scrape for case ${caseId} timed out in state "${staleJob.state}".`);
+    if (staleJob && staleJob.state.state === "running") {
+      warn(`Scrape for case ${caseId} timed out in state "${staleJob.state.state}".`);
+      try {
+        await updateCase(caseId, {
+          lastScrapeResult: { state: "errored", error: "Scrape timed out." },
+        });
+      } catch (err) {
+        warn(`Failed to persist timeout for case ${caseId}:`, err);
+      }
       cleanupJob(tabId);
       await safeCloseTab(tabId);
       processScrapeQueue();
     }
   }, JOB_TIMEOUT_MS);
   timeoutsByTab.set(tabId, timer);
+}
+
+async function beginScrapeInTab(
+  tabId: number,
+  caseId: string,
+  keepTabOpen: boolean,
+): Promise<void> {
+  await waitForTabComplete(tabId);
+  if (!jobsByTab.has(tabId)) {
+    return;
+  }
+  const command: BackgroundCommand = { type: "BEGIN_SCRAPE", caseId };
+  try {
+    await chrome.tabs.sendMessage(tabId, command);
+  } catch (err) {
+    warn(`Failed to send BEGIN_SCRAPE to tab ${tabId}:`, err);
+    const job = jobsByTab.get(tabId);
+    if (job) {
+      job.state = { state: "errored", error: "Content script unavailable." };
+    }
+    try {
+      await updateCase(caseId, {
+        lastScrapeResult: { state: "errored", error: "Content script unavailable." },
+      });
+    } catch (updateErr) {
+      warn(`Failed to persist content script error for case ${caseId}:`, updateErr);
+    }
+    if (!keepTabOpen) {
+      await safeCloseTab(tabId);
+    }
+    cleanupJob(tabId);
+    processScrapeQueue();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -177,7 +251,8 @@ chrome.runtime.onMessage.addListener(
     sendResponse: (response?: unknown) => void,
   ): boolean => {
     // Route based on message type.
-    switch (message.type) {
+    const typ = message.type;
+    switch (typ) {
       // ----- Messages from popup -----
 
       case "START_SCRAPE": {
@@ -198,7 +273,7 @@ chrome.runtime.onMessage.addListener(
       case "GET_SCRAPE_STATUS": {
         const active: Record<string, string> = {};
         for (const [, job] of jobsByTab) {
-          active[job.caseId] = job.state;
+          active[job.caseId] = job.state.state;
         }
         const response: ScrapeStatusResponse = { active };
         sendResponse(response);
@@ -207,20 +282,8 @@ chrome.runtime.onMessage.addListener(
 
       // ----- Messages from content script -----
 
-      case "SCRAPER_READY": {
-        handleScraperReady(message, sender, sendResponse);
-        return true; // async sendResponse
-      }
-
-      case "SCRAPE_RESULT": {
-        handleScrapeResult(message, sender).then(() => {
-          sendResponse({ ok: true });
-        });
-        return true;
-      }
-
-      case "SCRAPE_ERROR": {
-        handleScrapeError(message, sender).then(() => {
+      case "SCRAPE_STATE_CHANGE": {
+        handleScrapeStateChange(message, sender).then(() => {
           sendResponse({ ok: true });
         });
         return true;
@@ -228,6 +291,7 @@ chrome.runtime.onMessage.addListener(
 
       default: {
         // Unknown message type; ignore.
+        warn("Received message with unknown type:", typ satisfies never);
         return false;
       }
     }
@@ -268,132 +332,65 @@ async function handleScrapeAll(): Promise<void> {
 }
 
 /**
- * Content script reports that it has loaded and detected a page type.
- * We reply with the appropriate command so it knows what to do next.
+ * Content script reported a scrape state change.
  */
-function handleScraperReady(
-  message: ContentMessage & { type: "SCRAPER_READY" },
-  sender: chrome.runtime.MessageSender,
-  sendResponse: (response?: unknown) => void,
-): void {
-  const tabId = sender.tab?.id;
-  if (tabId === undefined) {
-    warn("SCRAPER_READY received with no tab id.");
-    sendResponse({ command: null });
-    return;
-  }
-
-  const job = jobsByTab.get(tabId);
-  if (!job) {
-    // This tab isn't part of a scrape job (e.g. user manually browsing).
-    log(`SCRAPER_READY from tab ${tabId} with no associated job; ignoring.`);
-    sendResponse({ command: null });
-    return;
-  }
-
-  const { pageType, url } = message;
-  log(`SCRAPER_READY: tab=${tabId}, case=${job.caseId}, page=${pageType}, url=${url}`);
-
-  let command: BackgroundCommand | null = null;
-
-  switch (pageType) {
-    case "welcome":
-      job.state = "welcome";
-      command = { type: "CLICK_SEARCH_CASES" };
-      break;
-
-    case "search":
-      job.state = "search";
-      command = { type: "FILL_AND_SEARCH", caseId: job.caseId };
-      break;
-
-    case "results":
-      job.state = "results";
-      command = { type: "PARSE_RESULTS", caseId: job.caseId };
-      break;
-
-    case "unknown":
-      warn(
-        `SCRAPER_READY: unknown page type for tab ${tabId} (${url}). ` +
-        "Content script may need to wait and re-detect.",
-      );
-      // Don't send a command; the content script will re-try or time out.
-      break;
-  }
-
-  sendResponse({ command });
-}
-
-/**
- * Content script successfully scraped a case. Persist results, clean up.
- */
-async function handleScrapeResult(
-  message: ContentMessage & { type: "SCRAPE_RESULT" },
+async function handleScrapeStateChange(
+  message: ContentMessage & { type: "SCRAPE_STATE_CHANGE" },
   sender: chrome.runtime.MessageSender,
 ): Promise<void> {
   const tabId = sender.tab?.id;
-  const { caseId, nextCourtDateTime, html, prosecutor, defendant } = message;
+  const { caseId, state } = message;
 
-  log(`SCRAPE_RESULT: case=${caseId}, nextCourtDate=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
+  log(`SCRAPE_STATE_CHANGE: case=${caseId}, state=${state.state}`);
 
-  if (tabId !== undefined) {
-    const job = jobsByTab.get(tabId);
+  const job = tabId !== undefined ? jobsByTab.get(tabId) : undefined;
+  if (state.state === "running") {
     if (job) {
-      if (!job.keepTabOpen) {
-        try {
-          const existingCase = await getCase(caseId);
-          const updates: {
-            lastScraped: string;
-            nextCourtDateTime: string | null;
-            scrapedHtml: string | null;
-            prosecutor?: string;
-            defendantName?: string;
-          } = {
-            lastScraped: new Date().toISOString(),
-            nextCourtDateTime,
-            scrapedHtml: html,
-          };
-          if (prosecutor && (!existingCase?.prosecutor || existingCase.prosecutor === "")) {
-            updates.prosecutor = prosecutor;
-          }
-          if (defendant && (!existingCase?.defendantName || existingCase.defendantName === "")) {
-            updates.defendantName = defendant;
-          }
-          await updateCase(caseId, updates);
-        } catch (err) {
-          warn(`Failed to persist scrape result for case ${caseId}:`, err);
-        }
-        await safeCloseTab(tabId);
-      }
-      job.state = "done";
+      job.state = state;
     }
-    cleanupJob(tabId);
+    return;
   }
 
-  processScrapeQueue();
-}
+  if (state.state === "succeeded") {
+    try {
+      const existingCase = await getCase(caseId);
+      const updates: {
+        lastScrapeResult: typeof state;
+        nextCourtDateTime: string | null;
+        prosecutor?: string;
+        defendantName?: string;
+      } = {
+        lastScrapeResult: state,
+        nextCourtDateTime: state.data.nextCourtDateTime,
+      };
+      if (state.data.prosecutor && (!existingCase?.prosecutor || existingCase.prosecutor === "")) {
+        updates.prosecutor = state.data.prosecutor;
+      }
+      if (state.data.defendant && (!existingCase?.defendantName || existingCase.defendantName === "")) {
+        updates.defendantName = state.data.defendant;
+      }
+      await updateCase(caseId, updates);
+    } catch (err) {
+      warn(`Failed to persist scrape result for case ${caseId}:`, err);
+    }
+  } else {
+    try {
+      await updateCase(caseId, {
+        lastScrapeResult: state,
+      });
+    } catch (err) {
+      warn(`Failed to persist scrape state for case ${caseId}:`, err);
+    }
+  }
 
-/**
- * Content script encountered an error while scraping.
- */
-async function handleScrapeError(
-  message: ContentMessage & { type: "SCRAPE_ERROR" },
-  sender: chrome.runtime.MessageSender,
-): Promise<void> {
-  const tabId = sender.tab?.id;
-  const { caseId, error } = message;
-
-  warn(`SCRAPE_ERROR: case=${caseId}, error="${error}"`);
+  if (job) {
+    job.state = state;
+    if (!job.keepTabOpen) {
+      await safeCloseTab(job.tabId);
+    }
+  }
 
   if (tabId !== undefined) {
-    const job = jobsByTab.get(tabId);
-    if (job) {
-      job.state = "error";
-      job.error = error;
-      if (!job.keepTabOpen) {
-        await safeCloseTab(tabId);
-      }
-    }
     cleanupJob(tabId);
   }
 

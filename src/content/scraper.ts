@@ -17,54 +17,37 @@
 
   type PageType = "welcome" | "search" | "results" | "unknown";
 
-  interface ScraperReadyMessage {
-    type: "SCRAPER_READY";
-    pageType: PageType;
-    url: string;
-  }
-
-  interface ScrapeResultMessage {
-    type: "SCRAPE_RESULT";
-    caseId: string;
+  type ScrapeData = {
     nextCourtDateTime: string | null;
     prosecutor: string | null;
     defendant: string | null;
-  }
+  };
 
-  interface ScrapeErrorMessage {
-    type: "SCRAPE_ERROR";
+  type ScrapeState =
+    | { state: "running" }
+    | { state: "succeeded"; data: ScrapeData }
+    | { state: "errored"; error: string }
+    | { state: "noCaseFound" };
+
+  interface ScrapeStateChangeMessage {
+    type: "SCRAPE_STATE_CHANGE";
     caseId: string;
-    error: string;
+    state: ScrapeState;
   }
 
-  interface ClickSearchCasesCommand {
-    type: "CLICK_SEARCH_CASES";
-  }
-
-  interface FillAndSearchCommand {
-    type: "FILL_AND_SEARCH";
-    caseId: string;
-  }
-
-  interface ParseResultsCommand {
-    type: "PARSE_RESULTS";
+  interface BeginScrapeCommand {
+    type: "BEGIN_SCRAPE";
     caseId: string;
   }
 
-  type BackgroundCommand =
-    | ClickSearchCasesCommand
-    | FillAndSearchCommand
-    | ParseResultsCommand;
-
-  interface BackgroundResponse {
-    command: BackgroundCommand | null;
-  }
+  type BackgroundCommand = BeginScrapeCommand;
 
   // -----------------------------------------------------------------------
   // Constants
   // -----------------------------------------------------------------------
 
   const PREFIX = "[CourtViewer]";
+  const ACTIVE_CASE_KEY = "courtviewer_active_case";
 
   /** Timeout for waiting for results after submitting the search form. */
   const RESULTS_TIMEOUT_MS = 30_000;
@@ -86,6 +69,30 @@
 
   function debug(...args: unknown[]): void {
     console.debug(PREFIX, "[DEBUG]", ...args);
+  }
+
+  function getActiveCaseId(): string | null {
+    try {
+      return sessionStorage.getItem(ACTIVE_CASE_KEY);
+    } catch {
+      return null;
+    }
+  }
+
+  function setActiveCaseId(caseId: string): void {
+    try {
+      sessionStorage.setItem(ACTIVE_CASE_KEY, caseId);
+    } catch {
+      // Ignore storage errors; scrape will still attempt on this page.
+    }
+  }
+
+  function clearActiveCaseId(): void {
+    try {
+      sessionStorage.removeItem(ACTIVE_CASE_KEY);
+    } catch {
+      // Ignore storage errors.
+    }
   }
 
   // -----------------------------------------------------------------------
@@ -299,6 +306,35 @@
     });
   }
 
+  function runScrapeStep(caseId: string): void {
+    const pageType = detectPageType();
+    log(`Running scrape step: case=${caseId}, page=${pageType}`);
+    switch (pageType) {
+      case "welcome":
+        if (!handleClickSearchCases()) {
+          sendScrapeError(caseId, "Could not find the Search Cases link.");
+        }
+        break;
+      case "search":
+        if (!handleFillAndSearch(caseId)) {
+          sendScrapeError(caseId, "Could not submit the case search form.");
+        }
+        break;
+      case "results":
+        handleParseResults(caseId);
+        break;
+      case "unknown":
+        window.setTimeout(() => {
+          if (getActiveCaseId() === caseId) {
+            runScrapeStep(caseId);
+          }
+        }, 1000);
+        break;
+      default:
+        throw new Error(`Unhandled page type: ${pageType satisfies never}`);
+    }
+  }
+
   // -----------------------------------------------------------------------
   // Results waiting & parsing
   // -----------------------------------------------------------------------
@@ -401,13 +437,20 @@
         return;
       }
 
+      const hasResults = hasResultsContent();
+      if (hasResults && !detailLink) {
+        debug("On results page but no matching case found");
+        sendCaseNotFound(caseId);
+        return;
+      }
+
       debug("No detail link found, parsing current page");
       const nextCourtDateTime = findNextCourtDateTime();
       const { prosecutor, defendant } = extractCaseParties(caseId);
 
       log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
 
-      sendScrapeResult(caseId, nextCourtDateTime, prosecutor, defendant);
+      sendScrapeSuccess(caseId, { nextCourtDateTime, prosecutor, defendant });
     } catch (err) {
       warn("Error during parseResults:", err);
       debug("Error stack:", err instanceof Error ? err.stack : "N/A");
@@ -759,34 +802,40 @@
   // Messaging helpers
   // -----------------------------------------------------------------------
 
-  function sendScrapeResult(
-    caseId: string,
-    nextCourtDateTime: string | null,
-    prosecutor: string | null,
-    defendant: string | null,
-  ): void {
-    const message: ScrapeResultMessage = {
-      type: "SCRAPE_RESULT",
+  function sendScrapeStateChange(caseId: string, state: ScrapeState): void {
+    const message: ScrapeStateChangeMessage = {
+      type: "SCRAPE_STATE_CHANGE",
       caseId,
-      nextCourtDateTime,
-      prosecutor,
-      defendant,
+      state,
     };
-    console.debug("Sending SCRAPE_RESULT message to background");
     chrome.runtime.sendMessage(message).catch((err) => {
-      warn("Failed to send SCRAPE_RESULT:", err);
+      warn("Failed to send SCRAPE_STATE_CHANGE:", err);
+    });
+  }
+
+  function sendScrapeRunning(caseId: string): void {
+    sendScrapeStateChange(caseId, { state: "running" });
+  }
+
+  function sendScrapeSuccess(caseId: string, data: ScrapeData): void {
+    clearActiveCaseId();
+    sendScrapeStateChange(caseId, {
+      state: "succeeded",
+      data,
     });
   }
 
   function sendScrapeError(caseId: string, error: string): void {
-    const message: ScrapeErrorMessage = {
-      type: "SCRAPE_ERROR",
-      caseId,
+    clearActiveCaseId();
+    sendScrapeStateChange(caseId, {
+      state: "errored",
       error,
-    };
-    chrome.runtime.sendMessage(message).catch((err) => {
-      warn("Failed to send SCRAPE_ERROR:", err);
     });
+  }
+
+  function sendCaseNotFound(caseId: string): void {
+    clearActiveCaseId();
+    sendScrapeStateChange(caseId, { state: "noCaseFound" });
   }
 
   // -----------------------------------------------------------------------
@@ -803,32 +852,14 @@
       sendResponse: (response?: unknown) => void,
     ): boolean => {
       debug("Received message:", message.type);
-      switch (message.type) {
-        case "CLICK_SEARCH_CASES": {
-          const success = handleClickSearchCases();
-          debug(`CLICK_SEARCH_CASES result: ${success}`);
-          sendResponse({ ok: success });
-          return false;
-        }
-
-        case "FILL_AND_SEARCH": {
-          const success = handleFillAndSearch(message.caseId);
-          debug(`FILL_AND_SEARCH result: ${success}`);
-          sendResponse({ ok: success });
-          return false;
-        }
-
-        case "PARSE_RESULTS": {
-          handleParseResults(message.caseId);
-          debug("PARSE_RESULTS initiated");
-          sendResponse({ ok: true });
-          return false;
-        }
-
-        default:
-          debug("Unknown command type, ignoring");
-          return false;
+      if (message.type !== "BEGIN_SCRAPE") {
+        return false;
       }
+      setActiveCaseId(message.caseId);
+      sendScrapeRunning(message.caseId);
+      runScrapeStep(message.caseId);
+      sendResponse({ ok: true });
+      return false;
     },
   );
 
@@ -841,43 +872,11 @@
    */
   function init(): void {
     debug("Initializing content script");
-    const pageType = detectPageType();
-    const url = window.location.href;
-
-    log(`Page loaded: type=${pageType}, url=${url}`);
-
-    const message: ScraperReadyMessage = {
-      type: "SCRAPER_READY",
-      pageType,
-      url,
-    };
-
-    debug("Sending SCRAPER_READY message to background");
-    chrome.runtime.sendMessage(message, (response: BackgroundResponse | undefined) => {
-      if (chrome.runtime.lastError) {
-        log("No response to SCRAPER_READY (may not be a scrape tab):", chrome.runtime.lastError.message);
-        return;
-      }
-
-      if (!response || !response.command) {
-        log("No command received; this tab is not part of a scrape job.");
-        return;
-      }
-
-      log("Received immediate command:", response.command.type);
-      debug("Executing immediate command from response");
-      switch (response.command.type) {
-        case "CLICK_SEARCH_CASES":
-          handleClickSearchCases();
-          break;
-        case "FILL_AND_SEARCH":
-          handleFillAndSearch(response.command.caseId);
-          break;
-        case "PARSE_RESULTS":
-          handleParseResults(response.command.caseId);
-          break;
-      }
-    });
+    const activeCaseId = getActiveCaseId();
+    if (!activeCaseId) {
+      return;
+    }
+    runScrapeStep(activeCaseId);
   }
 
   // Run init once the DOM is ready.

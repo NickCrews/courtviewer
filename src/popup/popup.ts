@@ -184,20 +184,25 @@ function renderTable(): void {
 
   // 2. Sort
   filtered.sort((a, b) => {
-    const aVal = a[sortField];
-    const bVal = b[sortField];
+    let aVal: string | null = null;
+    let bVal: string | null = null;
+
+    if (sortField === "lastScrapeResult") {
+      aVal = a.lastScrapeResult?.state ?? null;
+      bVal = b.lastScrapeResult?.state ?? null;
+    } else {
+      const aFieldVal = a[sortField as keyof Case];
+      const bFieldVal = b[sortField as keyof Case];
+      aVal = aFieldVal != null ? String(aFieldVal) : null;
+      bVal = bFieldVal != null ? String(bFieldVal) : null;
+    }
 
     // Nulls always sort last regardless of direction
     if (aVal == null && bVal == null) return 0;
     if (aVal == null) return 1;
     if (bVal == null) return -1;
 
-    let cmp: number;
-    if (typeof aVal === "string" && typeof bVal === "string") {
-      cmp = aVal.localeCompare(bVal, undefined, { sensitivity: "base" });
-    } else {
-      cmp = String(aVal).localeCompare(String(bVal));
-    }
+    const cmp = aVal.localeCompare(bVal, undefined, { sensitivity: "base" });
     return sortAsc ? cmp : -cmp;
   });
 
@@ -274,9 +279,17 @@ function buildScrapedCell(c: Case): string {
     const state = escapeHtml(activeScrapes[c.id]);
     return `<span class="scrape-status"><span class="status-dot active"></span>${state}</span>`;
   }
-  if (c.lastScraped) {
-    const rel = formatRelativeTime(c.lastScraped);
-    return `<span class="scrape-status"><span class="status-dot done"></span>${escapeHtml(rel)}</span>`;
+  if (c.lastScrapeResult) {
+    const result = c.lastScrapeResult;
+    if (result.state === "succeeded") {
+      return `<span class="scrape-status"><span class="status-dot done"></span>Succeeded</span>`;
+    } else if (result.state === "noCaseFound") {
+      return `<span class="scrape-status" title="Case not found in search results"><span class="status-dot notfound"></span>Not Found</span>`;
+    } else if (result.state === "errored") {
+      return `<span class="scrape-status" title="Error: ${escapeHtml(result.error)}"><span class="status-dot error"></span>Error</span>`;
+    } else if (result.state === "running") {
+      return `<span class="scrape-status"><span class="status-dot active"></span>Running</span>`;
+    }
   }
   return `<span class="scrape-status"><span class="status-dot never"></span>Never</span>`;
 }
@@ -308,7 +321,7 @@ function updateSortIndicators(): void {
 // ---------------------------------------------------------------------------
 function scrapeCase(id: string, keepTabOpen = false): void {
   chrome.runtime.sendMessage({ type: "START_SCRAPE", caseId: id, keepTabOpen });
-  activeScrapes[id] = "init";
+  activeScrapes[id] = "running";
   renderTable();
 }
 
@@ -410,9 +423,7 @@ async function handleSave(): Promise<void> {
       defendantName,
       prosecutor: null,
       notes,
-      lastScraped: null,
       nextCourtDateTime: null,
-      scrapedHtml: null,
     };
     await addCase(newCase);
     scrapeCase(rawId, false);
@@ -454,7 +465,7 @@ async function pollScrapeStatus(): Promise<void> {
 
       // Re-render only if status changed
       if (prev !== next) {
-        // If any jobs finished, reload case data (they may have new scrapedHtml / nextCourtDate)
+        // If any jobs finished, reload case data (they may have updated scrape data)
         cases = await getCases();
         renderTable();
       }
@@ -494,32 +505,6 @@ function escapeHtml(str: string): string {
     "'": "&#39;",
   };
   return str.replace(/[&<>"']/g, (ch) => map[ch] ?? ch);
-}
-
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-
-  if (diffMs < 0) return "just now";
-
-  const seconds = Math.floor(diffMs / 1000);
-  if (seconds < 60) return "just now";
-
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
-
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
-
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days !== 1 ? "s" : ""} ago`;
-
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months} month${months !== 1 ? "s" : ""} ago`;
-
-  const years = Math.floor(months / 12);
-  return `${years} year${years !== 1 ? "s" : ""} ago`;
 }
 
 /** Format a datetime string like "2024-07-15T14:30:00" as "Jul 15 (year), 8:30 AM" and highlight if within 7 days

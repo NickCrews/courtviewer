@@ -1,38 +1,47 @@
+export type ISODateString = `${number}-${number}-${number}T${number}:${number}:${number}.${number}Z`;
+
+export type ScrapeState =
+  | { state: "running" }
+  | { state: "succeeded", data: ScrapeData }
+  | { state: "errored", error: string }
+  | { state: "noCaseFound" }
+
+export type ScrapeData = {
+  nextCourtDateTime: string | null;
+  prosecutor: string | null;
+  defendant: string | null;
+}
+
 export interface Case {
   id: string;
   defendantName: string;
   prosecutor: string | null;
   notes: string;
-  lastScraped: string | null;
+  lastScrapeResult?: ScrapeState;
   nextCourtDateTime: string | null;
-  scrapedHtml: string | null;
 }
 
 export interface ScrapeJob {
   caseId: string;
   tabId: number;
-  state: "init" | "welcome" | "search" | "results" | "done" | "error";
-  keepTabOpen?: boolean;
-  error?: string;
+  timestampStarted: ISODateString
+  keepTabOpen: boolean;
+  state: ScrapeState;
 }
 
 // Messages from popup -> background
 export type PopupMessage =
-  | { type: "START_SCRAPE"; caseId: string; keepTabOpen?: boolean }
+  | { type: "START_SCRAPE"; caseId: string; keepTabOpen: boolean }
   | { type: "SCRAPE_ALL" }
   | { type: "GET_SCRAPE_STATUS" };
 
 // Messages from content script -> background
 export type ContentMessage =
-  | { type: "SCRAPER_READY"; pageType: "welcome" | "search" | "results" | "unknown"; url: string }
-  | { type: "SCRAPE_RESULT"; caseId: string; nextCourtDateTime: string | null; html: string; prosecutor: string | null; defendant: string | null }
-  | { type: "SCRAPE_ERROR"; caseId: string; error: string };
+  | { type: "SCRAPE_STATE_CHANGE"; caseId: string; state: ScrapeState }
 
 // Messages from background -> content script
 export type BackgroundCommand =
-  | { type: "CLICK_SEARCH_CASES" }
-  | { type: "FILL_AND_SEARCH"; caseId: string }
-  | { type: "PARSE_RESULTS"; caseId: string };
+  | { type: "BEGIN_SCRAPE"; caseId: string }
 
 // Response types
 export interface ScrapeStatusResponse {
