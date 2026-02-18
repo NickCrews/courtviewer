@@ -1,16 +1,28 @@
 # Contributing
 
-### Building
+Run once at dev environment creation to install deps:
 
 ```bash
 npm install
+```
+
+### Building
+
+```bash
 npm run build
 ```
 
 ### Testing
 
+Run once at dev environment creation to install chromium browser:
+
 ```bash
-npx playwright install chromium
+npx test:init
+```
+
+Then, to rebuild and run tests:
+
+```bash
 npm test
 ```
 
