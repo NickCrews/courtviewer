@@ -1,11 +1,13 @@
 export type ISODateString = `${number}-${number}-${number}T${number}:${number}:${number}.${number}Z`;
 
+// This NEEDS to be kept in sync with the ScrapeState type in content/scraper.ts
 export type ScrapeState =
-  | { state: "running" }
-  | { state: "succeeded", data: ScrapeData }
-  | { state: "errored", error: string }
-  | { state: "noCaseFound" }
+  | { caseId: string, state: "running" }
+  | { caseId: string, state: "succeeded", data: ScrapeData }
+  | { caseId: string, state: "errored", error: string }
+  | { caseId: string, state: "noCaseFound" }
 
+// This NEEDS to be kept in sync with the ScrapeState type in content/scraper.ts
 export type ScrapeData = {
   nextCourtDateTime: string | null;
   prosecutor: string | null;
@@ -37,7 +39,7 @@ export type PopupMessage =
 
 // Messages from content script -> background
 export type ContentMessage =
-  | { type: "SCRAPE_STATE_CHANGE"; caseId: string; state: ScrapeState }
+  | { type: "SCRAPE_STATE_CHANGE"; state: ScrapeState }
 
 // Messages from background -> content script
 export type BackgroundCommand =

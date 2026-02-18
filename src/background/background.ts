@@ -176,7 +176,7 @@ async function startScrapeForCase(caseId: string, keepTabOpen = false): Promise<
     tabId,
     keepTabOpen,
     timestampStarted: nowIso(),
-    state: { state: "running" },
+    state: { caseId, state: "running" },
   };
 
   jobsByTab.set(tabId, job);
@@ -194,7 +194,7 @@ async function startScrapeForCase(caseId: string, keepTabOpen = false): Promise<
       warn(`Scrape for case ${caseId} timed out in state "${staleJob.state.state}".`);
       try {
         await updateCase(caseId, {
-          lastScrapeResult: { state: "errored", error: "Scrape timed out." },
+          lastScrapeResult: { caseId, state: "errored", error: "Scrape timed out." },
         });
       } catch (err) {
         warn(`Failed to persist timeout for case ${caseId}:`, err);
@@ -223,11 +223,11 @@ async function beginScrapeInTab(
     warn(`Failed to send BEGIN_SCRAPE to tab ${tabId}:`, err);
     const job = jobsByTab.get(tabId);
     if (job) {
-      job.state = { state: "errored", error: "Content script unavailable." };
+      job.state = { caseId, state: "errored", error: "Content script unavailable." };
     }
     try {
       await updateCase(caseId, {
-        lastScrapeResult: { state: "errored", error: "Content script unavailable." },
+        lastScrapeResult: { caseId, state: "errored", error: "Content script unavailable." },
       });
     } catch (updateErr) {
       warn(`Failed to persist content script error for case ${caseId}:`, updateErr);
@@ -339,7 +339,8 @@ async function handleScrapeStateChange(
   sender: chrome.runtime.MessageSender,
 ): Promise<void> {
   const tabId = sender.tab?.id;
-  const { caseId, state } = message;
+  const { state } = message;
+  const caseId = state.caseId;
 
   log(`SCRAPE_STATE_CHANGE: case=${caseId}, state=${state.state}`);
 

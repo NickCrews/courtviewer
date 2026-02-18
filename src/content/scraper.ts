@@ -10,12 +10,12 @@
  * needed are inlined below.
  */
 
-(function () {
+(async function () {
   // -----------------------------------------------------------------------
   // Inline type definitions (mirrors src/types.ts -- no imports allowed)
   // -----------------------------------------------------------------------
 
-  type PageType = "welcome" | "search" | "results" | "unknown";
+  type PageType = "welcome" | "searchHome" | "searchResults" | "caseProfile" | "unknown";
 
   type ScrapeData = {
     nextCourtDateTime: string | null;
@@ -24,23 +24,22 @@
   };
 
   type ScrapeState =
-    | { state: "running" }
-    | { state: "succeeded"; data: ScrapeData }
-    | { state: "errored"; error: string }
-    | { state: "noCaseFound" };
+    | { caseId: string, state: "running" }
+    | { caseId: string, state: "succeeded"; data: ScrapeData }
+    | { caseId: string, state: "errored"; error: string }
+    | { caseId: string, state: "noCaseFound" };
 
-  interface ScrapeStateChangeMessage {
-    type: "SCRAPE_STATE_CHANGE";
-    caseId: string;
-    state: ScrapeState;
-  }
-
+  /** The message the background worker sends to us to trigger a start */
   interface BeginScrapeCommand {
     type: "BEGIN_SCRAPE";
     caseId: string;
   }
 
-  type BackgroundCommand = BeginScrapeCommand;
+  /** The message we send to the background worker to report a state change */
+  interface ScrapeStateChangeMessage {
+    type: "SCRAPE_STATE_CHANGE";
+    state: ScrapeState;
+  }
 
   // -----------------------------------------------------------------------
   // Constants
@@ -54,6 +53,11 @@
 
   /** Polling interval when waiting for results. */
   const POLL_INTERVAL_MS = 500;
+
+  // 3AN-25-08095CR
+  // 3PA-24-00277CR
+  // 3KO-25-00060CR
+  const CASE_ID_PATTERN = /[0-9A-Z]{3}-\d{2}-\d{5}[A-Z]{2}/i;
 
   // -----------------------------------------------------------------------
   // Logging helpers
@@ -71,27 +75,136 @@
     console.debug(PREFIX, "[DEBUG]", ...args);
   }
 
-  function getActiveCaseId(): string | null {
+  // -----------------------------------------------------------------------
+  // State change helpers
+  // -----------------------------------------------------------------------
+  // Every time the script takes an action, such as clicking a link, the page
+  // might reload, which causes this script to be re-injected.
+  // To maintain continuity across page loads, we use a state machine approach.
+  // The state is stored in sessionStorage, which persists across page reloads.
+  // To make progress, we load the state, run a step, possibly transition to
+  // a new state, and then store it back.
+
+  function loadActiveState(): ScrapeState | null {
     try {
-      return sessionStorage.getItem(ACTIVE_CASE_KEY);
+      const state = sessionStorage.getItem(ACTIVE_CASE_KEY);
+      return state ? JSON.parse(state) : null;
     } catch {
       return null;
     }
   }
 
-  function setActiveCaseId(caseId: string): void {
+  function storeActiveState(state: ScrapeState): void {
     try {
-      sessionStorage.setItem(ACTIVE_CASE_KEY, caseId);
+      sessionStorage.setItem(ACTIVE_CASE_KEY, JSON.stringify(state));
     } catch {
       // Ignore storage errors; scrape will still attempt on this page.
     }
   }
 
-  function clearActiveCaseId(): void {
+
+  function sendScrapeStateChange(state: ScrapeState): void {
+    const message: ScrapeStateChangeMessage = {
+      type: "SCRAPE_STATE_CHANGE",
+      state,
+    };
+    chrome.runtime.sendMessage(message).catch((err) => {
+      warn("Failed to send SCRAPE_STATE_CHANGE:", err);
+    }).then(() => {
+      debug("Sent SCRAPE_STATE_CHANGE message:", message);
+    });
+  }
+
+  function setState(state: ScrapeState): ScrapeState {
+    storeActiveState(state);
+    sendScrapeStateChange(state);
+    return state;
+  }
+
+  /**
+   * Listen for commands from the background service worker.
+   */
+  chrome.runtime.onMessage.addListener(
+    (
+      message: BeginScrapeCommand,
+      _sender: chrome.runtime.MessageSender,
+      sendResponse: (response?: unknown) => void,
+    ): boolean => {
+      debug("Received message:", message.type);
+      if (message.type !== "BEGIN_SCRAPE") {
+        return false;
+      }
+      setState({ caseId: message.caseId, state: "running" });
+      runStepWithIoErrorHandling();
+      sendResponse({ ok: true });
+      return false;
+    },
+  );
+
+  async function runStepWithIoErrorHandling(): Promise<void> {
+    const activeState = loadActiveState();
+    if (!activeState) {
+      debug("No active scrape state found on page load.");
+      return;
+    }
     try {
-      sessionStorage.removeItem(ACTIVE_CASE_KEY);
-    } catch {
-      // Ignore storage errors.
+      const newState = await runScrapeStep(activeState);
+      debug("Completed scrape step, new state:", newState);
+      setState(newState);
+    } catch (err) {
+      warn("Error in runStepWithIoErrorHandling:", err);
+      const state = { caseId: activeState.caseId, state: "errored", error: err instanceof Error ? err.message : String(err) } satisfies ScrapeState;
+      setState(state);
+    }
+  }
+
+  /**
+   * Given a starting scrape state, run one step of the scrape process, returning the new state.
+   * 
+   * This does not do any io, such as loading/saving the state to sessionStorage
+   * or sending message to the background worker; it just computes the next state based on the current page's DOM.
+   */
+  async function runScrapeStep(startingState: ScrapeState): Promise<ScrapeState> {
+    if (startingState.state !== "running") {
+      return startingState;
+    }
+    const runningState = { caseId: startingState.caseId, state: "running" } satisfies ScrapeState;
+    const caseId = startingState.caseId;
+    const pageType = detectPageType();
+    log(`Running scrape step: case=${startingState.caseId}, page=${pageType}`);
+    const startTime = Date.now();
+    const TIME_LIMIT_MS = 30_000;
+    while (true) {
+      switch (pageType) {
+        case "welcome":
+          gotoSearchPage()
+          return runningState;
+        case "searchHome":
+          handleFillAndSearch(caseId);
+          return runningState;
+        case "searchResults":
+          const result = await clickToCaseProfile(caseId);
+          if (result === "noCaseFound") {
+            return { caseId, state: "noCaseFound" };
+          } else if (result === "succeeded") {
+            // noop
+          } else {
+            throw new Error(`Unexpected result from clickToCaseProfile: ${result satisfies never}`);
+          }
+          return runningState;
+        case "caseProfile":
+          const parsedData = await parseCasePage(caseId);
+          return { caseId, state: "succeeded", data: parsedData }
+        case "unknown":
+          warn("Unknown page type, sleeping and then will retry detection.");
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          if (Date.now() - startTime > TIME_LIMIT_MS) {
+            throw new Error("Timed out waiting for page to load into a known state.");
+          }
+          continue;
+        default:
+          throw new Error(`Unhandled page type: ${pageType satisfies never}`);
+      }
     }
   }
 
@@ -101,36 +214,29 @@
 
   /**
    * Examine the DOM to determine which step of the court website we're on.
-   *
-   * Detection order matters: check "search" before "welcome" because the
-   * search form page also has navigation links that might match welcome
-   * heuristics.
-   */
+   * 
+   * If we are in the middle of a page transition
+   * (e.g. search submitted but results not loaded), may return "unknown".
+  */
   function detectPageType(): PageType {
-    debug("Starting page type detection");
-    // 1. Search form page: has the case number input field.
-    const caseInput = document.querySelector('input[name="caseDscr"]');
-    debug(`Checking for case input field:`, caseInput ? "found" : "not found");
-    if (caseInput) {
-      log("Detected page type: search");
-      return "search";
+    // Detection order matters: check "search" before "welcome" because the
+    // search form page also has navigation links that might match welcome
+    // heuristics.
+    if (document.querySelector('input[name="caseDscr"]')) {
+      return "searchHome";
     }
-
-    // 2. Results page: look for result tables or case-detail content.
-    debug("Checking for results content");
-    if (hasResultsContent()) {
-      log("Detected page type: results");
-      return "results";
+    // If there is an element with the text "Case Type:"
+    if (document.body.textContent?.includes("Case Type:")) {
+      return "caseProfile";
     }
-
-    // 3. Welcome / landing page: a prominent "Search Cases" link or button.
-    debug("Checking for search cases link");
+    // If there is an element with the text "Search Results"
+    if (document.body.textContent?.includes("Search Results")) {
+      return "searchResults";
+    }
+    // a prominent "Search Cases" link or button.
     if (hasSearchCasesLink()) {
-      log("Detected page type: welcome");
       return "welcome";
     }
-
-    log("Detected page type: unknown");
     return "unknown";
   }
 
@@ -169,50 +275,9 @@
   }
 
   /**
-   * Heuristically detect whether the current page contains search results
-   * or case-detail information.
-   */
-  function hasResultsContent(): boolean {
-    const searchResults = document.querySelector(".searchResults, table.results");
-    debug(`Checking explicit result containers:`, searchResults ? "found" : "not found");
-    if (searchResults) {
-      return true;
-    }
-
-    const mainContent = document.querySelector("#mainContent");
-    debug(`mainContent element:`, mainContent ? "found" : "not found");
-    if (mainContent) {
-      const tables = mainContent.querySelectorAll("table");
-      debug(`Tables in mainContent: ${tables.length}`);
-      for (const table of tables) {
-        const rowsWithLinks = table.querySelectorAll("tr a");
-        if (rowsWithLinks.length >= 2) {
-          debug(`Found table with ${rowsWithLinks.length} row links`);
-          return true;
-        }
-      }
-    }
-
-    const headings = document.querySelectorAll("h1, h2, h3, h4, h5, h6, .sectionHeader, legend");
-    debug(`Found ${headings.length} heading elements`);
-    for (const h of headings) {
-      if (/event|hearing|calendar|schedule|case\s*detail/i.test(h.textContent || "")) {
-        debug(`Found results heading:`, h.textContent?.substring(0, 50));
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  // -----------------------------------------------------------------------
-  // Command handlers
-  // -----------------------------------------------------------------------
-
-  /**
    * Find and click the "Search Cases" link or button on the welcome page.
    */
-  function handleClickSearchCases(): boolean {
+  function gotoSearchPage(): void {
     debug("Handling CLICK_SEARCH_CASES command");
     const anchors = document.querySelectorAll("a");
     debug(`Found ${anchors.length} anchor elements`);
@@ -220,7 +285,7 @@
       if (/search\s*cases/i.test(a.textContent || "")) {
         log("Clicking 'Search Cases' anchor:", a.href);
         a.click();
-        return true;
+        return;
       }
     }
 
@@ -229,7 +294,7 @@
       if (a.href && /search\.page/i.test(a.href)) {
         log("Clicking anchor with search.page href:", a.href);
         a.click();
-        return true;
+        return;
       }
     }
 
@@ -246,26 +311,25 @@
       if (/search\s*cases/i.test(text)) {
         log("Clicking 'Search Cases' button.");
         (btn as HTMLElement).click();
-        return true;
+        return;
       }
     }
 
     warn("Could not find 'Search Cases' link or button.");
-    return false;
+    throw new Error("Could not find 'Search Cases' link or button on welcome page.");
   }
 
   /**
    * Fill in the case number on the search form and submit it.
-   * After submission, begin polling for results.
+   * Returns immediately; does not wait for results.
    */
-  function handleFillAndSearch(caseId: string): boolean {
+  function handleFillAndSearch(caseId: string): void {
     debug(`Handling FILL_AND_SEARCH command for case: ${caseId}`);
     const input = document.querySelector(
       'input[name="caseDscr"]',
     ) as HTMLInputElement | null;
     if (!input) {
-      warn("Could not find case number input (name='caseDscr').");
-      return false;
+      throw new Error("Could not find case number input (name='caseDscr').");
     }
 
     debug(`Found case input field, current value: "${input.value}"`);
@@ -284,240 +348,80 @@
       ) as HTMLElement | null);
 
     if (!submitBtn) {
-      warn("Could not find the search submit button.");
-      return false;
+      throw new Error("Could not find the search submit button.");
     }
 
     debug("Found submit button, clicking");
     log("Clicking search submit button.");
     submitBtn.click();
-
-    debug("Starting to wait for results");
-    waitForResults(caseId);
-    return true;
   }
 
   /**
-   * Parse the current page immediately for results.
+   * After search form submission, poll the DOM until search results, an error message,
+   * or a timeout occurs.
    */
-  function handleParseResults(caseId: string): void {
-    parseResults(caseId).catch((err) => {
-      warn("Error in handleParseResults:", err);
-    });
-  }
-
-  function runScrapeStep(caseId: string): void {
-    const pageType = detectPageType();
-    log(`Running scrape step: case=${caseId}, page=${pageType}`);
-    switch (pageType) {
-      case "welcome":
-        if (!handleClickSearchCases()) {
-          sendScrapeError(caseId, "Could not find the Search Cases link.");
-        }
-        break;
-      case "search":
-        if (!handleFillAndSearch(caseId)) {
-          sendScrapeError(caseId, "Could not submit the case search form.");
-        }
-        break;
-      case "results":
-        handleParseResults(caseId);
-        break;
-      case "unknown":
-        window.setTimeout(() => {
-          if (getActiveCaseId() === caseId) {
-            runScrapeStep(caseId);
-          }
-        }, 1000);
-        break;
-      default:
-        throw new Error(`Unhandled page type: ${pageType satisfies never}`);
-    }
-  }
-
-  // -----------------------------------------------------------------------
-  // Results waiting & parsing
-  // -----------------------------------------------------------------------
-
-  /**
-   * After form submission, poll the DOM until results, an error message,
-   * or a timeout occurs. If the form submission triggers a full navigation,
-   * a new instance of the content script will handle the new page instead.
-   */
-  function waitForResults(caseId: string): void {
+  async function clickToCaseProfile(caseId: string): Promise<"succeeded" | "noCaseFound"> {
     const startTime = Date.now();
     debug(`Starting to wait for results, timeout: ${RESULTS_TIMEOUT_MS}ms, poll interval: ${POLL_INTERVAL_MS}ms`);
 
-    const intervalId = setInterval(() => {
-      const elapsed = Date.now() - startTime;
-      debug(`Polling for results... elapsed: ${elapsed}ms`);
-
-      if (elapsed > RESULTS_TIMEOUT_MS) {
-        clearInterval(intervalId);
-        warn("Timed out waiting for results.");
-        sendScrapeError(caseId, "Timed out waiting for results after form submission.");
-        return;
+    while (Date.now() - startTime < RESULTS_TIMEOUT_MS) {
+      try {
+        const result = await clickToCaseProfileOnce(caseId);
+        return result;
+      } catch (err) {
+        debug("Error in clickToCaseProfileOnce:", err);
       }
-
-      const processingDialog = document.querySelector(
-        "#processingDialog",
-      ) as HTMLElement | null;
-      if (processingDialog) {
-        const style = window.getComputedStyle(processingDialog);
-        const parent = processingDialog.closest(".ui-dialog") as HTMLElement | null;
-        if (
-          (style.display !== "none" && style.visibility !== "hidden") ||
-          (parent &&
-            window.getComputedStyle(parent).display !== "none")
-        ) {
-          debug("Processing dialog still visible, continuing to wait");
-          return;
-        }
-      }
-
-      const errorEl = document.querySelector(
-        ".feedback .feedbackPanelERROR, .feedbackPanelERROR, .feedbackPanelWARNING",
-      );
-      if (errorEl) {
-        clearInterval(intervalId);
-        const errorText =
-          errorEl.textContent?.trim() || "Unknown error from court site.";
-        log("Error feedback detected:", errorText);
-        sendScrapeError(caseId, errorText);
-        return;
-      }
-
-      debug("Checking if results content has appeared");
-      if (hasResultsContent()) {
-        clearInterval(intervalId);
-        log("Results content detected after form submission.");
-        parseResults(caseId).catch((err) => {
-          warn("Error in parseResults:", err);
-        });
-        return;
-      }
-
-      const caseInput = document.querySelector('input[name="caseDscr"]');
-      debug(`Case input still present: ${!!caseInput}`);
-      if (!caseInput && hasResultsContent()) {
-        clearInterval(intervalId);
-        debug("Page changed to results view");
-        parseResults(caseId).catch((err) => {
-          warn("Error in parseResults:", err);
-        });
-        return;
-      }
-    }, POLL_INTERVAL_MS);
-  }
-
-  /**
-   * Parse the current page for case detail information and send the result
-   * back to the background service worker.
-   */
-  async function parseResults(caseId: string): Promise<void> {
-    debug(`Parsing results for case: ${caseId}`);
-    try {
-      const errorEl = document.querySelector(
-        ".feedback .feedbackPanelERROR, .feedbackPanelERROR, .feedbackPanelWARNING",
-      );
-      if (errorEl) {
-        const errorText =
-          errorEl.textContent?.trim() || "Unknown error from court site.";
-        debug("Error element found:", errorText);
-        sendScrapeError(caseId, errorText);
-        return;
-      }
-
-      debug("Looking for case detail link");
-      const detailLink = findCaseDetailLink(caseId);
-      if (detailLink) {
-        log("Found case detail link; clicking through to detail page.");
-        debug("Detail link href:", detailLink.href);
-        detailLink.click();
-        return;
-      }
-
-      const hasResults = hasResultsContent();
-      if (hasResults && !detailLink) {
-        debug("On results page but no matching case found");
-        sendCaseNotFound(caseId);
-        return;
-      }
-
-      debug("No detail link found, parsing current page");
-      const nextCourtDateTime = findNextCourtDateTime();
-      const { prosecutor, defendant } = extractCaseParties(caseId);
-
-      log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
-
-      sendScrapeSuccess(caseId, { nextCourtDateTime, prosecutor, defendant });
-    } catch (err) {
-      warn("Error during parseResults:", err);
-      debug("Error stack:", err instanceof Error ? err.stack : "N/A");
-      sendScrapeError(
-        caseId,
-        err instanceof Error ? err.message : String(err),
-      );
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
     }
+    throw new Error("Timed out waiting for search results to load.");
   }
 
-  /**
-   * Extract prosecutor and defendant from page elements.
-   * Looks for elements with text like "Baker, Ryan Craig - Defendant" and "State of Alaska - Prosecution".
-   */
-  function extractCaseParties(caseId: string): { prosecutor: string | null; defendant: string | null } {
-    debug(`Extracting case parties for case: ${caseId}`);
-    let prosecutor: string | null = null;
-    let defendant: string | null = null;
-
-    const allElements = document.querySelectorAll("*");
-    for (const el of allElements) {
-      const text = (el.textContent || "").trim();
-
-      if (/\s*-\s*Defendant\s*$/i.test(text)) {
-        const match = text.match(/^(.+?)\s*-\s*Defendant\s*$/i);
-        if (match) {
-          defendant = match[1].trim();
-          debug(`Found defendant element: "${text}" -> extracted: "${defendant}"`);
-        }
-      }
-
-      if (/\s*-\s*Prosecution\s*$/i.test(text)) {
-        const match = text.match(/^(.+?)\s*-\s*Prosecution\s*$/i);
-        if (match) {
-          prosecutor = match[1].trim();
-          debug(`Found prosecutor element: "${text}" -> extracted: "${prosecutor}"`);
-        }
-      }
-
-      if (prosecutor && defendant) {
-        break;
-      }
+  async function clickToCaseProfileOnce(caseId: string): Promise<"succeeded" | "noCaseFound"> {
+    debug("Looking for case detail link");
+    const links = findCaseDetailLinks();
+    if (links === null) {
+      throw new Error("Not on results page, cannot find case detail link");
     }
-
-    debug(`Extracted prosecutor: "${prosecutor}", defendant: "${defendant}"`);
-    return { prosecutor, defendant };
+    if (links.length === 0) {
+      debug(`On results page but found no cases`);
+      return "noCaseFound";
+    }
+    const matchingLinks = links.filter((l) => l.caseId === caseId);
+    if (matchingLinks.length === 0) {
+      debug(`found ${links.length} case links but none match case ID ${caseId}: `, links.map((l) => l.caseId).join(", "));
+      throw new Error("No cases found matching search criteria.");
+    }
+    const detailLink = matchingLinks[0]!;
+    log("Found case detail link; clicking through to detail page.");
+    debug("Detail link href:", detailLink.link.href);
+    detailLink.link.click();
+    return "succeeded";
   }
 
   /**
-   * On a results listing page, try to find a link that leads to the detail
-   * page for the given case.
-   *
-   * Returns the anchor element if found, or null if we appear to already be
-   * on a detail page (or if there's no identifiable detail link).
-   */
-  function findCaseDetailLink(caseId: string): HTMLAnchorElement | null {
-    const normalisedCaseId = caseId.replace(/\s+/g, "").toLowerCase();
-    debug(`Looking for detail link with normalised case ID: ${normalisedCaseId}`);
+ * On a results listing page, find all links to case detail pages.
+ *
+ * Returns null if we aren't on the results page.
+ * Returns an array of links if we're on the results page, even if no matching case ID found, to allow for "no case found" detection.
+ */
+  function findCaseDetailLinks(): Array<{ caseId: string; link: HTMLAnchorElement }> | null {
+    debug(`Looking for detail link with case ID pattern: ${CASE_ID_PATTERN}`);
+
+    // Early exit, if "No Records Found" message is present
+    if (document.body.textContent?.includes("No Records Found")) {
+      debug(`"No Records Found" message detected on page.`);
+      return [];
+    }
 
     const mainContent = document.querySelector("#mainContent");
     const searchRoot = mainContent || document.body;
 
     const links = searchRoot.querySelectorAll("a");
     debug(`Found ${links.length} links in search root`);
+    const results = [];
     for (const link of links) {
-      const linkText = (link.textContent || "").replace(/\s+/g, "").toLowerCase();
-      if (linkText.includes(normalisedCaseId)) {
+      const linkText = (link.textContent || "").replace(/\s+/g, "");
+      if (CASE_ID_PATTERN.test(linkText)) {
         debug(`Found link with matching case ID text:`, linkText.substring(0, 50));
         if (
           link.href &&
@@ -526,15 +430,84 @@
           link.closest("table, .searchResults, .results")
         ) {
           debug(`Link passes heuristics, returning it`);
-          return link;
+          results.push({ caseId: linkText, link });
         } else {
           debug(`Link failed heuristics check`);
         }
       }
     }
+    return results;
+  }
 
-    debug("No matching detail link found");
-    return null;
+  /**
+   * Parse the current page for case detail information and send the result
+   * back to the background service worker.
+   */
+  async function parseCasePage(caseId: string): Promise<ScrapeData> {
+    debug(`Parsing results for case: ${caseId}`);
+    const errorEl = document.querySelector(
+      ".feedback .feedbackPanelERROR, .feedbackPanelERROR, .feedbackPanelWARNING",
+    );
+    if (errorEl) {
+      const errorText =
+        errorEl.textContent?.trim() || "Unknown error from court site.";
+      const message = "Error element found: " + errorText;
+      throw new Error(message);
+    }
+
+    debug("parsing current page");
+    const nextCourtDateTime = findNextCourtDateTime();
+    const { prosecutor, defendant } = extractCaseParties(caseId);
+
+    log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
+
+    return { nextCourtDateTime, prosecutor, defendant };
+
+  }
+
+  interface CaseParties {
+    prosecutor: string | null;
+    defendant: string | null;
+  }
+  /**
+   * Extract prosecutor and defendant from page elements.
+   * Looks for elements with text like "Baker, Ryan Craig - Defendant" and "State of Alaska - Prosecution".
+   */
+  function extractCaseParties(caseId: string): CaseParties {
+    debug(`Extracting case parties for case: ${caseId}`);
+    let result: CaseParties = { prosecutor: null, defendant: null };
+
+    const allElements = document.querySelectorAll("*");
+    for (const el of allElements) {
+      const text = (el.textContent || "").trim();
+
+      if (/\s*-\s*Defendant\s*$/i.test(text)) {
+        const match = text.match(/^(.+?)\s*-\s*Defendant\s*$/i);
+        if (match) {
+          result.defendant = match[1].trim();
+          debug(`Found defendant element: "${text}" -> extracted: "${result.defendant}"`);
+        }
+      }
+
+      if (/\s*-\s*Prosecution\s*$/i.test(text)) {
+        const match = text.match(/^(.+?)\s*-\s*Prosecution\s*$/i);
+        if (match) {
+          result.prosecutor = match[1].trim();
+          debug(`Found prosecutor element: "${text}" -> extracted: "${result.prosecutor}"`);
+        }
+      }
+
+      if (result.prosecutor && result.defendant) {
+        break;
+      }
+    }
+
+    debug(`Extracted prosecutor: "${result.prosecutor}", defendant: "${result.defendant}"`);
+    if (result.prosecutor && result.defendant) {
+      return result;
+    }
+    warn("Could not extract prosecutor and defendant from page.");
+    throw new Error(`Failed to extract case parties for case ${caseId}: prosecutor="${result.prosecutor}", defendant="${result.defendant}"`);
   }
 
   /**
@@ -798,85 +771,12 @@
     return `${y}-${m}-${d}T${h}:${min}:${s}`;
   }
 
-  // -----------------------------------------------------------------------
-  // Messaging helpers
-  // -----------------------------------------------------------------------
-
-  function sendScrapeStateChange(caseId: string, state: ScrapeState): void {
-    const message: ScrapeStateChangeMessage = {
-      type: "SCRAPE_STATE_CHANGE",
-      caseId,
-      state,
-    };
-    chrome.runtime.sendMessage(message).catch((err) => {
-      warn("Failed to send SCRAPE_STATE_CHANGE:", err);
-    });
-  }
-
-  function sendScrapeRunning(caseId: string): void {
-    sendScrapeStateChange(caseId, { state: "running" });
-  }
-
-  function sendScrapeSuccess(caseId: string, data: ScrapeData): void {
-    clearActiveCaseId();
-    sendScrapeStateChange(caseId, {
-      state: "succeeded",
-      data,
-    });
-  }
-
-  function sendScrapeError(caseId: string, error: string): void {
-    clearActiveCaseId();
-    sendScrapeStateChange(caseId, {
-      state: "errored",
-      error,
-    });
-  }
-
-  function sendCaseNotFound(caseId: string): void {
-    clearActiveCaseId();
-    sendScrapeStateChange(caseId, { state: "noCaseFound" });
-  }
-
-  // -----------------------------------------------------------------------
-  // Command listener
-  // -----------------------------------------------------------------------
-
   /**
-   * Listen for commands from the background service worker.
-   */
-  chrome.runtime.onMessage.addListener(
-    (
-      message: BackgroundCommand,
-      _sender: chrome.runtime.MessageSender,
-      sendResponse: (response?: unknown) => void,
-    ): boolean => {
-      debug("Received message:", message.type);
-      if (message.type !== "BEGIN_SCRAPE") {
-        return false;
-      }
-      setActiveCaseId(message.caseId);
-      sendScrapeRunning(message.caseId);
-      runScrapeStep(message.caseId);
-      sendResponse({ ok: true });
-      return false;
-    },
-  );
-
-  // -----------------------------------------------------------------------
-  // Initialisation
-  // -----------------------------------------------------------------------
-
-  /**
-   * On page load, detect the page type and notify the background worker.
+   * On page load, run one step of the scrape process.
    */
   function init(): void {
     debug("Initializing content script");
-    const activeCaseId = getActiveCaseId();
-    if (!activeCaseId) {
-      return;
-    }
-    runScrapeStep(activeCaseId);
+    runStepWithIoErrorHandling();
   }
 
   // Run init once the DOM is ready.
