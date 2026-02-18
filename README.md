@@ -21,6 +21,21 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 
 ---
 
+## Updating the Extension
+
+To update to a newer version of Alaska Court Viewer while preserving your saved cases:
+
+1. Download the latest release .zip file from https://github.com/NickCrews/courtviewer/releases.
+2. Unzip this to a new folder.
+3. Open Chrome and type `chrome://extensions/` in the address bar, then press Enter.
+4. Find "Alaska Court Viewer" in the list.
+5. Click the **trash/delete icon** to uninstall the old version. *(Your case data will be preserved in your Chrome profile.)*
+6. Click the **"Load unpacked"** button.
+7. In the file picker, select the newly unzipped folder.
+8. The updated Alaska Court Viewer will now be installed and ready to use. Your cases and data will appear in the popup.
+
+---
+
 ## Found a Bug? Have a suggestion? Other feedback?
 
 This software very well may contain bugs. If you find one, please send an
