@@ -11,6 +11,7 @@ const EXTENSION_DIR = path.resolve(__dirname, "../dist");
 export const test = base.extend<{
     context: BrowserContext;
     extensionId: string;
+    popupPage: Page;
 }>({
     context: async ({ }, use) => {
         const context = await chromium.launchPersistentContext('', {
@@ -32,6 +33,12 @@ export const test = base.extend<{
         const extensionId = serviceWorker.url().split('/')[2];
         await use(extensionId);
     },
+    popupPage: async ({ context, extensionId }, use) => {
+        const popupUrl = `chrome-extension://${extensionId}/popup/popup.html`;
+        const page = await context.newPage();
+        await page.goto(popupUrl, { waitUntil: "domcontentloaded" });
+        await use(page);
+    },
 });
 export const expect = test.expect;
 
@@ -48,7 +55,7 @@ export async function takeDebugScreenshot(page: Page, name: string): Promise<voi
     const filePath = path.join(dir, `${name}-${Date.now()}.png`);
     try {
         await page.screenshot({ path: filePath, fullPage: true });
-        console.log(`  [screenshot] saved: ${filePath}`);
+        console.debug(`  [screenshot] saved: ${filePath}`);
     } catch (err) {
         console.warn(`  [screenshot] failed to save ${filePath}:`, err);
     }
