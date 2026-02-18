@@ -188,8 +188,9 @@ function renderTable(): void {
     let bVal: string | null = null;
 
     if (sortField === "lastScrape") {
-      aVal = a.lastScrape?.state ?? null;
-      bVal = b.lastScrape?.state ?? null;
+      console.log("a and b", a.lastScrape, b.lastScrape);
+      aVal = a.lastScrape ? `${a.lastScrape.state} ${a.lastScrape.timestamp}` : null;
+      bVal = b.lastScrape ? `${b.lastScrape.state} ${b.lastScrape.timestamp}` : null;
     } else {
       const aFieldVal = a[sortField as keyof Case];
       const bFieldVal = b[sortField as keyof Case];
@@ -275,7 +276,6 @@ function renderTable(): void {
 }
 
 function buildScrapedCell(c: Case): string {
-  console.log(`Case`, c);
   if (!c.lastScrape) {
     return `<span class="scrape-status"><span class="status-dot never"></span>Never</span>`;
   }
