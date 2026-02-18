@@ -244,10 +244,19 @@ th.sort-desc .sort-arrow::after {
 
 /* ===== Scraping Status ===== */
 .scrape-status {
-  display: inline-flex;
+  display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 5px;
   font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.scrape-when {
+  flex-basis: 100%;
+  font-size: 10px;
+  opacity: 0.8;
+  margin-top: 2px;
 }
 
 .status-dot {

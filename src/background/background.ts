@@ -24,6 +24,7 @@ import type {
   BackgroundCommand,
   ScrapeStatusResponse,
   ISODateString,
+  Case,
 } from "../types.js";
 import { getCases, updateCase, getCase } from "../storage.js";
 
@@ -194,7 +195,7 @@ async function startScrapeForCase(caseId: string, keepTabOpen = false): Promise<
       warn(`Scrape for case ${caseId} timed out in state "${staleJob.state.state}".`);
       try {
         await updateCase(caseId, {
-          lastScrapeResult: { caseId, state: "errored", error: "Scrape timed out." },
+          lastScrape: { caseId, timestamp: nowIso(), state: "errored", error: "Scrape timed out." },
         });
       } catch (err) {
         warn(`Failed to persist timeout for case ${caseId}:`, err);
@@ -227,7 +228,7 @@ async function beginScrapeInTab(
     }
     try {
       await updateCase(caseId, {
-        lastScrapeResult: { caseId, state: "errored", error: "Content script unavailable." },
+        lastScrape: { caseId, timestamp: nowIso(), state: "errored", error: "Content script unavailable." },
       });
     } catch (updateErr) {
       warn(`Failed to persist content script error for case ${caseId}:`, updateErr);
@@ -340,28 +341,23 @@ async function handleScrapeStateChange(
 ): Promise<void> {
   const tabId = sender.tab?.id;
   const { state } = message;
-  const caseId = state.caseId;
+  const { caseId, state: stateCode } = state;
 
-  log(`SCRAPE_STATE_CHANGE: case=${caseId}, state=${state.state}`);
+  log(`SCRAPE_STATE_CHANGE: case=${caseId}, state=${stateCode}`);
 
   const job = tabId !== undefined ? jobsByTab.get(tabId) : undefined;
-  if (state.state === "running") {
+  if (stateCode === "running") {
     if (job) {
       job.state = state;
     }
     return;
   }
 
-  if (state.state === "succeeded") {
+  if (stateCode === "succeeded") {
     try {
       const existingCase = await getCase(caseId);
-      const updates: {
-        lastScrapeResult: typeof state;
-        nextCourtDateTime: string | null;
-        prosecutor?: string;
-        defendantName?: string;
-      } = {
-        lastScrapeResult: state,
+      const updates: Partial<Case> = {
+        lastScrape: { ...state, timestamp: nowIso() },
         nextCourtDateTime: state.data.nextCourtDateTime,
       };
       if (state.data.prosecutor && (!existingCase?.prosecutor || existingCase.prosecutor === "")) {
@@ -374,14 +370,16 @@ async function handleScrapeStateChange(
     } catch (err) {
       warn(`Failed to persist scrape result for case ${caseId}:`, err);
     }
-  } else {
+  } else if (stateCode === "errored" || stateCode === "noCaseFound") {
     try {
       await updateCase(caseId, {
-        lastScrapeResult: state,
+        lastScrape: { ...state, timestamp: nowIso() },
       });
     } catch (err) {
       warn(`Failed to persist scrape state for case ${caseId}:`, err);
     }
+  } else {
+    throw new Error(`Unknown scrape state: ${(stateCode satisfies never)}`);
   }
 
   if (job) {

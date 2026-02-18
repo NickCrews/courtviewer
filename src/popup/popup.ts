@@ -70,9 +70,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Listen for external storage changes (e.g. background script updating a case)
   chrome.storage.onChanged.addListener(handleStorageChange);
 
-  // Poll scrape status every 2 seconds
+  // Poll scrape status every 1 second
   pollScrapeStatus();
-  statusPollTimer = setInterval(pollScrapeStatus, 2000);
+  statusPollTimer = setInterval(pollScrapeStatus, 1000);
 });
 
 // ---------------------------------------------------------------------------
@@ -187,9 +187,9 @@ function renderTable(): void {
     let aVal: string | null = null;
     let bVal: string | null = null;
 
-    if (sortField === "lastScrapeResult") {
-      aVal = a.lastScrapeResult?.state ?? null;
-      bVal = b.lastScrapeResult?.state ?? null;
+    if (sortField === "lastScrape") {
+      aVal = a.lastScrape?.state ?? null;
+      bVal = b.lastScrape?.state ?? null;
     } else {
       const aFieldVal = a[sortField as keyof Case];
       const bFieldVal = b[sortField as keyof Case];
@@ -275,23 +275,24 @@ function renderTable(): void {
 }
 
 function buildScrapedCell(c: Case): string {
-  if (activeScrapes[c.id]) {
-    const state = escapeHtml(activeScrapes[c.id]);
-    return `<span class="scrape-status"><span class="status-dot active"></span>${state}</span>`;
+  console.log(`Case`, c);
+  if (!c.lastScrape) {
+    return `<span class="scrape-status"><span class="status-dot never"></span>Never</span>`;
   }
-  if (c.lastScrapeResult) {
-    const result = c.lastScrapeResult;
-    if (result.state === "succeeded") {
-      return `<span class="scrape-status"><span class="status-dot done"></span>Succeeded</span>`;
-    } else if (result.state === "noCaseFound") {
-      return `<span class="scrape-status" title="Case not found in search results"><span class="status-dot notfound"></span>Not Found</span>`;
-    } else if (result.state === "errored") {
-      return `<span class="scrape-status" title="Error: ${escapeHtml(result.error)}"><span class="status-dot error"></span>Error</span>`;
-    } else if (result.state === "running") {
-      return `<span class="scrape-status"><span class="status-dot active"></span>Running</span>`;
-    }
+  const state = c.lastScrape;
+  const when = formatRelativeTime(state.timestamp);
+  if (state.state === "succeeded") {
+    return `<span class="scrape-status"><span class="status-dot done"></span>Succeeded<div class="scrape-when">${when}</div></span>`;
+  } else if (state.state === "noCaseFound") {
+    return `<span class="scrape-status" title="Case not found in search results"><span class="status-dot notfound"></span>Not Found<div class="scrape-when">${when}</div></span>`;
+  } else if (state.state === "errored") {
+    return `<span class="scrape-status" title="Error: ${escapeHtml(state.error)}"><span class="status-dot error"></span>Error<div class="scrape-when">${when}</div></span>`;
+  } else if (state.state === "running") {
+    return `<span class="scrape-status"><span class="status-dot active"></span>Running</span>`;
+  } else {
+    throw new Error(`Unknown scrape state: ${(state satisfies never)}`);
   }
-  return `<span class="scrape-status"><span class="status-dot never"></span>Never</span>`;
+
 }
 
 function buildActionButtons(c: Case): string {
@@ -545,4 +546,31 @@ function formatCourtDateTime(datetimeStr: string | null): string {
   }
 
   return escapeHtml(formatted);
+}
+
+
+function formatRelativeTime(isoString: string): string {
+  const date = new Date(isoString);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+
+  if (diffMs < 0) return "just now";
+
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return "just now";
+
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days !== 1 ? "s" : ""} ago`;
+
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months !== 1 ? "s" : ""} ago`;
+
+  const years = Math.floor(months / 12);
+  return `${years} year${years !== 1 ? "s" : ""} ago`;
 }

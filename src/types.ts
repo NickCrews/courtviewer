@@ -19,7 +19,7 @@ export interface Case {
   defendantName: string;
   prosecutor: string | null;
   notes: string;
-  lastScrapeResult?: ScrapeState;
+  lastScrape?: ScrapeState & { timestamp: ISODateString };
   nextCourtDateTime: string | null;
 }
 
