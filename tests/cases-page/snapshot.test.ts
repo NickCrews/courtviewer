@@ -54,6 +54,18 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
             judge: "Williams, Dawson A",
         },
     },
+    {
+        name: "parses other names correctly",
+        filePath: "case3.html",
+        caseId: "3PA-24-00277CR",
+        now: "2026-03-14T00:00:00",
+        expected: {
+            nextCourtDateTime: "2026-05-13T15:30:00",
+            prosecutor: "State of Alaska",
+            defendant: "Barney, Dallan Kenneth Edwin",
+            judge: "McKay, Jr, Patrick J",
+        },
+    },
 ];
 
 for (const snapshot of CASE_PAGE_SNAPSHOTS) {
