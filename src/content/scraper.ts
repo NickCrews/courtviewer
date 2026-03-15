@@ -17,8 +17,12 @@
 
   type PageType = "welcome" | "searchHome" | "searchResults" | "caseProfile" | "unknown";
 
+  type Branded<T, B> = T & { __brand: B };
+  /** ISO format with no timezone: YYYY-MM-DDTHH:MM:SS */
+  type DateTimeString = Branded<string, "DateTimeString">;
+
   type ScrapeData = {
-    nextCourtDateTime: string | null;
+    nextCourtDateTime: DateTimeString | null;
     prosecutor: string | null;
     defendant: string | null;
   };
@@ -521,12 +525,14 @@
   }
 
   /**
-   * Scan the page for court event/hearing dates and times, returning the
-   * earliest future datetime as an ISO string (YYYY-MM-DDTHH:MM:SS), or
-   * null if none found.
+   * Finds the next court date in `YYYY-MM-DDTHH:MM:SS` format, or null if none found.
+   * 
+   * Uses the following strategies, in order, returning the first result found:
+   * - Look for tables with "Date" and "Result/Action" columns, and find the earliest date that has no result/action and is in the future.
+   * - Look for tables near headings with keywords like "Event", "Hearing", "Calendar", "Schedule", and extract the earliest future date from those tables.
    */
-  function findNextCourtDateTime(nowOverride?: string): string | null {
-    debug("Starting search for next court date");
+  function findNextCourtDateTime(nowOverride?: string): DateTimeString | null {
+    debug("Starting search for next unresolved court date");
     const now = nowOverride ? new Date(nowOverride) : new Date();
     if (isNaN(now.getTime())) {
       throw new Error(`Invalid now override: ${nowOverride}`);
@@ -540,6 +546,56 @@
     maxFutureDate.setHours(23, 59, 59, 999);
     debug(`Today's date: ${formatISODate(now)}`);
 
+    const unresolvedSearchResult = findNextUnresolvedCourtDateTime(now, maxFutureDate);
+    if (unresolvedSearchResult.kind === "found") {
+      const earliest = formatISODateTime(unresolvedSearchResult.date);
+      debug(`Earliest unresolved future datetime: ${earliest}`);
+      return earliest;
+    }
+    if (unresolvedSearchResult.kind === "noUnresolvedInEventTable") {
+      log("No unresolved future court dates found on page.");
+      return null;
+    }
+
+    return findNextFutureCourtDateTimeFallback(now, maxFutureDate);
+  }
+
+  type UnresolvedDateSearchResult =
+    | { kind: "found"; date: Date }
+    | { kind: "noUnresolvedInEventTable" }
+    | { kind: "eventTableNotFound" };
+
+  function findNextUnresolvedCourtDateTime(now: Date, maxFutureDate: Date): UnresolvedDateSearchResult {
+    const unresolvedFutureDates: Date[] = [];
+    let foundEventResultStructure = false;
+
+    const mainContent = document.querySelector("#mainContent");
+    const tables = (mainContent || document.body).querySelectorAll("table");
+    debug(`Looking for unresolved events in ${tables.length} tables`);
+    for (const table of tables) {
+      const extracted = extractUnresolvedDatesFromEventTable(table, unresolvedFutureDates, now, maxFutureDate);
+      if (extracted === "foundEventTable") {
+        foundEventResultStructure = true;
+      }
+    }
+
+    if (unresolvedFutureDates.length > 0) {
+      unresolvedFutureDates.sort((a, b) => a.getTime() - b.getTime());
+      return { kind: "found", date: unresolvedFutureDates[0] };
+    }
+    if (foundEventResultStructure) {
+      return { kind: "noUnresolvedInEventTable" };
+    }
+    return { kind: "eventTableNotFound" };
+  }
+
+  /**
+   * Return the next future date found in the page, without requiring it to be in an "Event" table or to have no result/action.
+   * 
+   * This is a fallback for unexpected page variants with no Event + Result/Action table.
+   * We'd prefer to only return future dates that are in an Event table and have no result/action, but in some cases the page structure may not allow us to reliably determine that, so this is a best-effort fallback to find any future date on the page.
+   */
+  function findNextFutureCourtDateTimeFallback(now: Date, maxFutureDate: Date): DateTimeString | null {
     const futureDates: Date[] = [];
 
     const headings = document.querySelectorAll(
@@ -600,6 +656,51 @@
     return earliest;
   }
 
+  function extractUnresolvedDatesFromEventTable(
+    table: HTMLTableElement,
+    unresolvedFutureDates: Date[],
+    now: Date,
+    maxFutureDate: Date,
+  ): "notEventTable" | "foundEventTable" {
+    const dateColumnIndex = getTableColumnIndexByHeader(table, /date/i);
+    const resultColumnIndex = getTableColumnIndexByHeader(table, /result|action/i);
+    if (dateColumnIndex === null || resultColumnIndex === null) {
+      return "notEventTable";
+    }
+
+    const bodyRows = table.querySelectorAll("tbody tr");
+    for (const row of bodyRows) {
+      const cells = row.querySelectorAll("td");
+      if (cells.length === 0) {
+        continue;
+      }
+
+      const dateText = (cells[dateColumnIndex]?.textContent || "").trim();
+      const resultText = (cells[resultColumnIndex]?.textContent || "").trim();
+      if (!dateText || resultText) {
+        continue;
+      }
+
+      const parsed = parseAnyCourtDate(dateText);
+      if (parsed && parsed >= now && parsed <= maxFutureDate) {
+        unresolvedFutureDates.push(parsed);
+      }
+    }
+
+    return "foundEventTable";
+  }
+
+  function getTableColumnIndexByHeader(table: HTMLTableElement, headerPattern: RegExp): number | null {
+    const headers = table.querySelectorAll("thead th");
+    for (let i = 0; i < headers.length; i++) {
+      const text = (headers[i]?.textContent || "").trim();
+      if (headerPattern.test(text)) {
+        return i;
+      }
+    }
+    return null;
+  }
+
   /**
    * Walk upward / forward from a heading element to find the closest table.
    */
@@ -645,47 +746,43 @@
     for (const cell of cells) {
       const text = (cell.textContent || "").trim();
 
-      // Try MM/DD/YYYY HH:MM AM/PM format first.
-      const dateTimeMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})\s*(AM|PM)\b/i);
-      if (dateTimeMatch) {
-        const parsed = parseUSDateTime(dateTimeMatch[1], dateTimeMatch[2], dateTimeMatch[3]);
-        if (parsed && parsed >= now && parsed <= maxFutureDate) {
-          futureDates.push(parsed);
-        }
-        continue;
-      }
-
-      // Try MM/DD/YYYY or MM/DD/YY format without time.
-      const slashMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
-      if (slashMatch) {
-        const parsed = parseUSDate(slashMatch[1]);
-        if (parsed && parsed >= now && parsed <= maxFutureDate) {
-          futureDates.push(parsed);
-        }
-        continue;
-      }
-
-      // Try "Month DD, YYYY" format (e.g. "January 15, 2025").
-      const longMatch = text.match(
-        /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},?\s+\d{4})\b/i,
-      );
-      if (longMatch) {
-        const parsed = new Date(longMatch[1]);
-        if (!isNaN(parsed.getTime()) && parsed >= now && parsed <= maxFutureDate) {
-          futureDates.push(parsed);
-        }
-        continue;
-      }
-
-      // Try YYYY-MM-DD (ISO format).
-      const isoMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-      if (isoMatch) {
-        const parsed = new Date(isoMatch[1] + "T00:00:00");
-        if (!isNaN(parsed.getTime()) && parsed >= now && parsed <= maxFutureDate) {
-          futureDates.push(parsed);
-        }
+      const parsed = parseAnyCourtDate(text);
+      if (parsed && parsed >= now && parsed <= maxFutureDate) {
+        futureDates.push(parsed);
       }
     }
+  }
+
+  function parseAnyCourtDate(text: string): Date | null {
+    // Try MM/DD/YYYY HH:MM AM/PM format first.
+    const dateTimeMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})\s*(AM|PM)\b/i);
+    if (dateTimeMatch) {
+      return parseUSDateTime(dateTimeMatch[1], dateTimeMatch[2], dateTimeMatch[3]);
+    }
+
+    // Try MM/DD/YYYY or MM/DD/YY format without time.
+    const slashMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
+    if (slashMatch) {
+      return parseUSDate(slashMatch[1]);
+    }
+
+    // Try "Month DD, YYYY" format (e.g. "January 15, 2025").
+    const longMatch = text.match(
+      /\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\s+\d{1,2},?\s+\d{4})\b/i,
+    );
+    if (longMatch) {
+      const parsed = new Date(longMatch[1]);
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    // Try YYYY-MM-DD (ISO format).
+    const isoMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+    if (isoMatch) {
+      const parsed = new Date(isoMatch[1] + "T00:00:00");
+      return isNaN(parsed.getTime()) ? null : parsed;
+    }
+
+    return null;
   }
 
   /**
@@ -781,14 +878,14 @@
   /**
    * Format a Date as an ISO datetime string without timezone (YYYY-MM-DDTHH:MM:SS).
    */
-  function formatISODateTime(date: Date): string {
+  function formatISODateTime(date: Date): DateTimeString {
     const y = date.getFullYear();
     const m = String(date.getMonth() + 1).padStart(2, "0");
     const d = String(date.getDate()).padStart(2, "0");
     const h = String(date.getHours()).padStart(2, "0");
     const min = String(date.getMinutes()).padStart(2, "0");
     const s = String(date.getSeconds()).padStart(2, "0");
-    return `${y}-${m}-${d}T${h}:${min}:${s}`;
+    return `${y}-${m}-${d}T${h}:${min}:${s}` as DateTimeString;
   }
 
   /**
