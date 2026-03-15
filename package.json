@@ -7,7 +7,8 @@
     "build": "tsc && node build.js",
     "watch": "chokidar \"src/**/*\" \"assets/**/*\" \"manifest.json\" \"build.js\" \"tsconfig.json\" --initial -c \"npm run build\"",
     "test:init": "npx playwright install chromium",
-    "test": "node build.js && npx playwright test",
+    "test": "npm run build && npx playwright test",
+    "test:headed": "npm run build && npx playwright test --headed",
     "clean": "rm -rf dist",
     "bundle": "npm run build && node build.js bundle",
     "publish-gh": "npm run bundle && gh release create v$(node -p \"require('./package.json').version\") release/alaska-court-viewer-$(node -p \"require('./package.json').version\").zip --draft"
