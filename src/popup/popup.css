@@ -29,49 +29,43 @@ body {
   }
 }
 
-/* ===== Header ===== */
-.header {
-  background: #1e293b;
-  color: #ffffff;
-  padding: 10px 16px;
-}
-
-.header h1 {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-}
-
-.subtitle {
-  font-size: 12px;
-  color: #94a3b8;
-  margin-top: 2px;
-}
-
 /* ===== Controls Bar ===== */
 .controls-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-bottom: 1px solid #e2e8f0;
-  background: #f8fafc;
+  gap: 10px;
+  padding: 6px 12px;
+  background: #1e293b;
+}
+
+.header-title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  white-space: nowrap;
 }
 
 .search-input {
   flex: 1;
-  height: 30px;
+  height: 26px;
   padding: 0 10px;
   font-size: 12px;
-  border: 1px solid #cbd5e1;
+  border: 1px solid #475569;
   border-radius: 6px;
   outline: none;
+  background: #334155;
+  color: #ffffff;
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 
+.search-input::placeholder {
+  color: #94a3b8;
+}
+
 .search-input:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 2px rgba(96, 165, 250, 0.25);
 }
 
 /* ===== Buttons ===== */
@@ -79,8 +73,8 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 30px;
-  padding: 0 12px;
+  height: 26px;
+  padding: 0 10px;
   font-size: 12px;
   font-weight: 600;
   border: none;
@@ -562,7 +556,7 @@ th.sort-desc .sort-arrow::after {
 .footer {
   margin-top: auto;
   text-align: center;
-  padding: 10px 20px;
+  padding: 4px 20px;
   border-top: 1px solid #e2e8f0;
 }
 
