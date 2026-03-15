@@ -423,6 +423,7 @@ async function handleSave(): Promise<void> {
       id: rawId,
       defendantName,
       prosecutor: null,
+      judge: null,
       notes,
       nextCourtDateTime: null,
     };

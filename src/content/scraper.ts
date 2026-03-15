@@ -25,6 +25,7 @@
     nextCourtDateTime: DateTimeString | null;
     prosecutor: string | null;
     defendant: string | null;
+    judge: string | null;
   };
 
   type ScrapeStepOptions = {
@@ -472,10 +473,11 @@
     debug("parsing current page");
     const nextCourtDateTime = findNextCourtDateTime(options?.now);
     const { prosecutor, defendant } = extractCaseParties(caseId);
+    const judge = extractCaseJudge();
 
-    log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
+    log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}, judge=${judge}`);
 
-    return { nextCourtDateTime, prosecutor, defendant };
+    return { nextCourtDateTime, prosecutor, defendant, judge };
 
   }
 
@@ -522,6 +524,64 @@
     }
     warn("Could not extract prosecutor and defendant from page.");
     throw new Error(`Failed to extract case parties for case ${caseId}: prosecutor="${result.prosecutor}", defendant="${result.defendant}"`);
+  }
+
+  function extractCaseJudge(): string | null {
+    const normalize = (text: string): string => text.replace(/\s+/g, " ").trim();
+    const looksLikeJudgeLabel = (text: string): boolean => /\bcase\s+judge\b/i.test(normalize(text));
+    const directText = (el: Element): string => {
+      let text = "";
+      for (const child of Array.from(el.childNodes)) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          text += child.textContent || "";
+        }
+      }
+      return normalize(text);
+    };
+
+    const readNextValueText = (el: Element): string | null => {
+      let sibling: Node | null = el.nextSibling;
+      while (sibling) {
+        if (sibling.nodeType === Node.TEXT_NODE) {
+          const text = normalize(sibling.textContent || "");
+          if (text && !looksLikeJudgeLabel(text)) {
+            return text;
+          }
+        } else if (sibling.nodeType === Node.ELEMENT_NODE) {
+          const text = normalize((sibling.textContent || ""));
+          if (text && !looksLikeJudgeLabel(text)) {
+            return text;
+          }
+        }
+        sibling = sibling.nextSibling;
+      }
+      return null;
+    };
+
+    const candidates = document.querySelectorAll("li, th, td, dt, dd, div, span, label, strong, b");
+    for (const candidate of candidates) {
+      const labelText = candidate.children.length > 0
+        ? directText(candidate)
+        : normalize(candidate.textContent || "");
+      if (!looksLikeJudgeLabel(labelText)) {
+        continue;
+      }
+
+      const inlineValueMatch = labelText.match(/\bcase\s+judge\b(?:\s*:|\s+)(\S.*)$/i);
+      if (inlineValueMatch) {
+        const inlineValue = normalize(inlineValueMatch[1]);
+        if (inlineValue) {
+          return inlineValue;
+        }
+      }
+
+      const siblingValue = readNextValueText(candidate);
+      if (siblingValue) {
+        return siblingValue;
+      }
+    }
+
+    return null;
   }
 
   /**

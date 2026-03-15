@@ -6,6 +6,7 @@ type ExpectedScrapeData = {
     nextCourtDateTime: string | null;
     prosecutor: string | null;
     defendant: string | null;
+    judge: string | null;
 };
 
 export type CasePageSnapshot = {
@@ -26,6 +27,7 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
             nextCourtDateTime: "2026-03-24T13:30:00",
             prosecutor: "State of Alaska",
             defendant: "Posey, Lisa Ann",
+            judge: "Williams, Dawson A",
         },
     },
     {
@@ -37,6 +39,7 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
             nextCourtDateTime: null,
             prosecutor: "State of Alaska",
             defendant: "Posey, Lisa Ann",
+            judge: "Williams, Dawson A",
         },
     },
     {
@@ -48,6 +51,7 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
             nextCourtDateTime: "2026-03-24T13:30:00",
             prosecutor: "State of Alaska",
             defendant: "Posey, Lisa Ann",
+            judge: "Williams, Dawson A",
         },
     },
 ];

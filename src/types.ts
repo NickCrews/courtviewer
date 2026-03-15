@@ -12,12 +12,14 @@ export type ScrapeData = {
   nextCourtDateTime: string | null;
   prosecutor: string | null;
   defendant: string | null;
+  judge: string | null;
 }
 
 export interface Case {
   id: string;
   defendantName: string;
   prosecutor: string | null;
+  judge: string | null;
   notes: string;
   lastScrape?: ScrapeState & { timestamp: ISODateString };
   nextCourtDateTime: string | null;

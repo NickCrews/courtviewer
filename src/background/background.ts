@@ -366,6 +366,9 @@ async function handleScrapeStateChange(
       if (state.data.defendant && (!existingCase?.defendantName || existingCase.defendantName === "")) {
         updates.defendantName = state.data.defendant;
       }
+      if (state.data.judge && (!existingCase?.judge || existingCase.judge === "")) {
+        updates.judge = state.data.judge;
+      }
       await updateCase(caseId, updates);
     } catch (err) {
       warn(`Failed to persist scrape result for case ${caseId}:`, err);
