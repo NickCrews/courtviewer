@@ -289,7 +289,7 @@ function buildScrapedCell(c: Case): string {
   const state = c.lastScrape;
   const when = formatRelativeTime(state.timestamp);
   if (state.state === "succeeded") {
-    return `<span class="scrape-status"><span class="status-dot done"></span>Succeeded<div class="scrape-when">${when}</div></span>`;
+    return `<span class="scrape-status"><span class="status-dot done"></span><div class="scrape-when">${when}</div></span>`;
   } else if (state.state === "noCaseFound") {
     return `<span class="scrape-status" title="Case not found in search results"><span class="status-dot notfound"></span>Not Found<div class="scrape-when">${when}</div></span>`;
   } else if (state.state === "errored") {
