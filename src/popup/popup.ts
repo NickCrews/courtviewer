@@ -246,12 +246,18 @@ function renderTable(): void {
 
     // Defendant name
     const tdDefendant = document.createElement("td");
-    tdDefendant.textContent = c.defendantName || "\u2014";
+    tdDefendant.className = "cell-truncate";
+    const defText = c.defendantName || "\u2014";
+    tdDefendant.textContent = defText;
+    tdDefendant.title = defText;
     tr.appendChild(tdDefendant);
 
     // Judge
     const tdJudge = document.createElement("td");
-    tdJudge.textContent = c.judge || "\u2014";
+    tdJudge.className = "cell-truncate";
+    const judgeText = c.judge || "\u2014";
+    tdJudge.textContent = judgeText;
+    tdJudge.title = judgeText;
     tr.appendChild(tdJudge);
 
     // Case ID
@@ -302,15 +308,20 @@ function buildScrapedCell(c: Case): string {
 
 }
 
+const ICON_OPEN = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V10"/><path d="M10 2h4v4"/><path d="M14 2 7.5 8.5"/></svg>`;
+const ICON_SCRAPE = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 2.5v4h4"/><path d="M2.3 10a6 6 0 1 0 1.2-6.2L1.5 6.5"/></svg>`;
+const ICON_EDIT = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 2.5a1.77 1.77 0 0 1 2.5 2.5L5.5 13.5 2 14.5l1-3.5Z"/></svg>`;
+const ICON_DELETE = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M12 4.5 11.5 13a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 13L4 4.5"/></svg>`;
+
 function buildActionButtons(c: Case): string {
-  const scrapeLabel = activeScrapes[c.id] ? "Scraping..." : "Scrape";
   const scrapeDisabled = activeScrapes[c.id] ? "disabled" : "";
-  const openLabel = activeScrapes[c.id] ? "Opening..." : "Open";
+  const scrapeTitle = activeScrapes[c.id] ? "Scraping…" : "Scrape";
+  const openTitle = activeScrapes[c.id] ? "Opening…" : "Open";
   let html = '';
-  html += `<button class="btn btn-sm btn-outline" data-action="open" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${openLabel}</button>`;
-  html += `<button class="btn btn-sm btn-outline" data-action="scrape" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${scrapeLabel}</button>`;
-  html += `<button class="btn btn-sm btn-outline" data-action="edit" data-case-id="${escapeHtml(c.id)}">Edit</button>`;
-  html += `<button class="btn btn-sm btn-danger" data-action="delete" data-case-id="${escapeHtml(c.id)}">Delete</button>`;
+  html += `<button class="btn-icon btn-icon-outline" title="${openTitle}" data-action="open" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${ICON_OPEN}</button>`;
+  html += `<button class="btn-icon btn-icon-outline" title="${scrapeTitle}" data-action="scrape" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${ICON_SCRAPE}</button>`;
+  html += `<button class="btn-icon btn-icon-outline" title="Edit" data-action="edit" data-case-id="${escapeHtml(c.id)}">${ICON_EDIT}</button>`;
+  html += `<button class="btn-icon btn-icon-danger" title="Delete" data-action="delete" data-case-id="${escapeHtml(c.id)}">${ICON_DELETE}</button>`;
   return html;
 }
 
