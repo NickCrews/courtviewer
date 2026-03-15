@@ -262,6 +262,7 @@ function renderTable(): void {
 
     // Case ID
     const tdId = document.createElement("td");
+    tdId.className = "cell-case-id";
     tdId.textContent = c.id;
     tr.appendChild(tdId);
 

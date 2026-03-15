@@ -227,7 +227,6 @@ th.sort-desc .sort-arrow::after {
 
 .cases-table tbody td {
   padding: 7px 10px;
-  font-size: 12px;
   text-align: left;
   vertical-align: middle;
 }
@@ -284,6 +283,10 @@ th.sort-desc .sort-arrow::after {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cell-case-id {
+  color: #64748b;
 }
 
 .cases-table th.actions-header {
