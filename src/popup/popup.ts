@@ -129,9 +129,9 @@ function bindEventListeners(): void {
   });
 
   // Close modal when clicking overlay backdrop
-  caseModal.addEventListener("click", (e) => {
-    if (e.target === caseModal) hideModal();
-  });
+  // caseModal.addEventListener("click", (e) => {
+  //   if (e.target === caseModal) hideModal();
+  // });
 
   // Close preview
   closePreviewBtn.addEventListener("click", () => {
