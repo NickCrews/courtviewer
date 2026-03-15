@@ -226,9 +226,13 @@ th.sort-desc .sort-arrow::after {
 }
 
 .cases-table .actions-cell {
-  display: flex;
+  white-space: nowrap;
+}
+
+.cases-table .actions-buttons {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-  flex-wrap: nowrap;
 }
 
 /* ===== Icon Buttons ===== */
@@ -342,6 +346,12 @@ th.sort-desc .sort-arrow::after {
   color: #dc2626;
 }
 
+.court-date-closed {
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
 /* ===== Scraping Status ===== */
 .scrape-status {
   display: flex;
@@ -350,6 +360,21 @@ th.sort-desc .sort-arrow::after {
   gap: 5px;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.scrape-status-multiline {
+  align-items: center;
+  white-space: normal;
+}
+
+.scrape-status-lines {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+
+.scrape-status-time {
+  display: block;
 }
 
 .status-dot {

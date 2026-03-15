@@ -23,10 +23,13 @@
 
   type ScrapeData = {
     nextCourtDateTime: DateTimeString | null;
+    status: CaseStatus;
     prosecutor: string | null;
     defendant: string | null;
     judge: string | null;
   };
+
+  type CaseStatus = "open" | "closed";
 
   type ScrapeStepOptions = {
     now?: string;
@@ -472,13 +475,47 @@
 
     debug("parsing current page");
     const nextCourtDateTime = findNextCourtDateTime(options?.now);
+    const status = extractCaseStatus();
     const { prosecutor, defendant } = extractCaseParties(caseId);
     const judge = extractCaseJudge();
 
-    log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}, judge=${judge}`);
+    log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, status=${status}, prosecutor=${prosecutor}, defendant=${defendant}, judge=${judge}`);
 
-    return { nextCourtDateTime, prosecutor, defendant, judge };
+    return { nextCourtDateTime, status, prosecutor, defendant, judge };
 
+  }
+
+  function extractCaseStatus(): CaseStatus {
+    const normalize = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+    const labels = document.querySelectorAll(".caseHdrLabel, li, th, td, dt, dd, div, span, label, strong, b");
+    for (const label of labels) {
+      const labelText = normalize(label.textContent || "");
+      if (!/^case\s+status\s*:?$/i.test(labelText)) {
+        continue;
+      }
+
+      let valueText = "";
+      const nextElement = label.nextElementSibling;
+      if (nextElement) {
+        valueText = normalize(nextElement.textContent || "");
+      }
+      if (!valueText) {
+        const inlineMatch = labelText.match(/^case\s+status\s*:\s*(.+)$/i);
+        if (inlineMatch) {
+          valueText = normalize(inlineMatch[1]);
+        }
+      }
+
+      if (/closed/i.test(valueText)) {
+        return "closed";
+      }
+      if (valueText) {
+        return "open";
+      }
+    }
+
+    return "open";
   }
 
   const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);

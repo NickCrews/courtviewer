@@ -4,6 +4,7 @@ import path from "path";
 
 type ExpectedScrapeData = {
     nextCourtDateTime: string | null;
+    status: "open" | "closed";
     prosecutor: string | null;
     defendant: string | null;
     judge: string | null;
@@ -25,6 +26,7 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         now: "2026-03-14T00:00:00",
         expected: {
             nextCourtDateTime: "2026-03-24T13:30:00",
+            status: "open",
             prosecutor: "State of Alaska",
             // raw defendant: "Posey, Lisa Ann",
             defendant: "Lisa Posey",
@@ -39,6 +41,7 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         now: "2027-03-14T00:00:00", // A year after all events
         expected: {
             nextCourtDateTime: null,
+            status: "open",
             prosecutor: "State of Alaska",
             // raw defendant: "Posey, Lisa Ann",
             defendant: "Lisa Posey",
@@ -53,6 +56,7 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         now: "2026-03-14T00:00:00",
         expected: {
             nextCourtDateTime: "2026-03-24T13:30:00",
+            status: "open",
             prosecutor: "State of Alaska",
             // raw defendant: "Posey, Lisa Ann",
             defendant: "Lisa Posey",
@@ -67,11 +71,25 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         now: "2026-03-14T00:00:00",
         expected: {
             nextCourtDateTime: "2026-05-13T15:30:00",
+            status: "open",
             prosecutor: "State of Alaska",
             // raw defendant: "Barney, Dallan Kenneth Edwin",
             defendant: "Dallan Barney",
             // raw judge: "McKay, Jr, Patrick J",
             judge: "Patrick McKay",
+        },
+    },
+    {
+        name: "parses the status as closed",
+        filePath: "caseClosed.html",
+        caseId: "3PA-24-00228CR",
+        now: "2026-03-14T00:00:00",
+        expected: {
+            nextCourtDateTime: null,
+            status: "closed",
+            prosecutor: "State of Alaska",
+            defendant: "Donald Albright",
+            judge: "Shawn Traini",
         },
     },
 ];

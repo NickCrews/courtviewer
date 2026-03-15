@@ -359,6 +359,7 @@ async function handleScrapeStateChange(
       const updates: Partial<Case> = {
         lastScrape: { ...state, timestamp: nowIso() },
         nextCourtDateTime: state.data.nextCourtDateTime,
+        status: state.data.status,
       };
       if (state.data.prosecutor && (!existingCase?.prosecutor || existingCase.prosecutor === "")) {
         updates.prosecutor = state.data.prosecutor;

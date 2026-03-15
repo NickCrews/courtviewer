@@ -1,5 +1,7 @@
 export type ISODateString = `${number}-${number}-${number}T${number}:${number}:${number}.${number}Z`;
 
+export type CaseStatus = "open" | "closed";
+
 // This NEEDS to be kept in sync with the ScrapeState type in content/scraper.ts
 export type ScrapeState =
   | { caseId: string, state: "running" }
@@ -10,6 +12,7 @@ export type ScrapeState =
 // This NEEDS to be kept in sync with the ScrapeState type in content/scraper.ts
 export type ScrapeData = {
   nextCourtDateTime: string | null;
+  status: CaseStatus;
   prosecutor: string | null;
   defendant: string | null;
   judge: string | null;
@@ -22,6 +25,7 @@ export interface Case {
   judge: string | null;
   notes: string;
   lastScrape?: ScrapeState & { timestamp: ISODateString };
+  status: CaseStatus;
   nextCourtDateTime: string | null;
 }
 

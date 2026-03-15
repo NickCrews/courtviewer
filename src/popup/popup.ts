@@ -268,7 +268,7 @@ function renderTable(): void {
 
     // Next court date
     const tdDate = document.createElement("td");
-    tdDate.innerHTML = formatCourtDateTime(c.nextCourtDateTime);
+    tdDate.innerHTML = formatNextEvent(c);
     tr.appendChild(tdDate);
 
     // Last scraped
@@ -298,7 +298,7 @@ function buildScrapedCell(c: Case): string {
   if (state.state === "succeeded") {
     return `<span class="scrape-status"><span class="status-dot done"></span>${when}</span>`;
   } else if (state.state === "noCaseFound") {
-    return `<span class="scrape-status" title="Case not found in search results"><span class="status-dot notfound"></span>Not Found ${when}</span>`;
+    return `<span class="scrape-status scrape-status-multiline" title="Case not found in search results"><span class="status-dot notfound"></span><span class="scrape-status-lines"><span>Not Found</span><span class="scrape-status-time">${when}</span></span></span>`;
   } else if (state.state === "errored") {
     return `<span class="scrape-status" title="Error: ${escapeHtml(state.error)}"><span class="status-dot error"></span>Error ${when}</span>`;
   } else if (state.state === "running") {
@@ -318,10 +318,12 @@ function buildActionButtons(c: Case): string {
   const scrapeTitle = activeScrapes[c.id] ? "Scraping…" : "Scrape";
   const openTitle = activeScrapes[c.id] ? "Opening…" : "Open";
   let html = '';
+  html += `<div class="actions-buttons">`;
   html += `<button class="btn-icon btn-icon-outline" title="${openTitle}" data-action="open" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${ICON_OPEN}</button>`;
   html += `<button class="btn-icon btn-icon-outline" title="${scrapeTitle}" data-action="scrape" data-case-id="${escapeHtml(c.id)}" ${scrapeDisabled}>${ICON_SCRAPE}</button>`;
   html += `<button class="btn-icon btn-icon-outline" title="Edit" data-action="edit" data-case-id="${escapeHtml(c.id)}">${ICON_EDIT}</button>`;
   html += `<button class="btn-icon btn-icon-danger" title="Delete" data-action="delete" data-case-id="${escapeHtml(c.id)}">${ICON_DELETE}</button>`;
+  html += `</div>`;
   return html;
 }
 
@@ -446,6 +448,7 @@ async function handleSave(): Promise<void> {
       prosecutor: null,
       judge: judge || null,
       notes,
+      status: "open",
       nextCourtDateTime: null,
     };
     await addCase(newCase);
@@ -562,6 +565,13 @@ function formatCourtDateTime(datetimeStr: string | null): string {
 
   const cls = diffDays >= 0 && diffDays <= 7 ? " upcoming" : "";
   return `<span class="court-date${cls}"><span class="court-date-day">${escapeHtml(datePart)}</span><span class="court-date-time">${escapeHtml(timePart)}</span>${relPart ? `<span class="court-date-rel">${escapeHtml(relPart)}</span>` : ""}</span>`;
+}
+
+function formatNextEvent(c: Case): string {
+  if (c.status === "closed") {
+    return '<span class="court-date-closed">closed</span>';
+  }
+  return formatCourtDateTime(c.nextCourtDateTime);
 }
 
 
