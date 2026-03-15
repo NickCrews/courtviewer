@@ -23,6 +23,10 @@
     defendant: string | null;
   };
 
+  type ScrapeStepOptions = {
+    now?: string;
+  };
+
   type ScrapeState =
     | { caseId: string, state: "running" }
     | { caseId: string, state: "succeeded"; data: ScrapeData }
@@ -104,6 +108,10 @@
 
 
   function sendScrapeStateChange(state: ScrapeState): void {
+    if (!chrome?.runtime?.sendMessage) {
+      debug("chrome.runtime.sendMessage unavailable; skipping SCRAPE_STATE_CHANGE message.");
+      return;
+    }
     const message: ScrapeStateChangeMessage = {
       type: "SCRAPE_STATE_CHANGE",
       state,
@@ -124,22 +132,24 @@
   /**
    * Listen for commands from the background service worker.
    */
-  chrome.runtime.onMessage.addListener(
-    (
-      message: BeginScrapeCommand,
-      _sender: chrome.runtime.MessageSender,
-      sendResponse: (response?: unknown) => void,
-    ): boolean => {
-      debug("Received message:", message.type);
-      if (message.type !== "BEGIN_SCRAPE") {
+  if (chrome?.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener(
+      (
+        message: BeginScrapeCommand,
+        _sender: chrome.runtime.MessageSender,
+        sendResponse: (response?: unknown) => void,
+      ): boolean => {
+        debug("Received message:", message.type);
+        if (message.type !== "BEGIN_SCRAPE") {
+          return false;
+        }
+        setState({ caseId: message.caseId, state: "running" });
+        runStepWithIoErrorHandling();
+        sendResponse({ ok: true });
         return false;
-      }
-      setState({ caseId: message.caseId, state: "running" });
-      runStepWithIoErrorHandling();
-      sendResponse({ ok: true });
-      return false;
-    },
-  );
+      },
+    );
+  }
 
   async function runStepWithIoErrorHandling(): Promise<void> {
     const activeState = loadActiveState();
@@ -164,7 +174,7 @@
    * This does not do any io, such as loading/saving the state to sessionStorage
    * or sending message to the background worker; it just computes the next state based on the current page's DOM.
    */
-  async function runScrapeStep(startingState: ScrapeState): Promise<ScrapeState> {
+  async function runScrapeStep(startingState: ScrapeState, options?: ScrapeStepOptions): Promise<ScrapeState> {
     if (startingState.state !== "running") {
       return startingState;
     }
@@ -193,7 +203,7 @@
           }
           return runningState;
         case "caseProfile":
-          const parsedData = await parseCasePage(caseId);
+          const parsedData = await parseCasePage(caseId, options);
           return { caseId, state: "succeeded", data: parsedData }
         case "unknown":
           warn("Unknown page type, sleeping and then will retry detection.");
@@ -443,7 +453,7 @@
    * Parse the current page for case detail information and send the result
    * back to the background service worker.
    */
-  async function parseCasePage(caseId: string): Promise<ScrapeData> {
+  async function parseCasePage(caseId: string, options?: ScrapeStepOptions): Promise<ScrapeData> {
     debug(`Parsing results for case: ${caseId}`);
     const errorEl = document.querySelector(
       ".feedback .feedbackPanelERROR, .feedbackPanelERROR, .feedbackPanelWARNING",
@@ -456,7 +466,7 @@
     }
 
     debug("parsing current page");
-    const nextCourtDateTime = findNextCourtDateTime();
+    const nextCourtDateTime = findNextCourtDateTime(options?.now);
     const { prosecutor, defendant } = extractCaseParties(caseId);
 
     log(`Parsed results: nextCourtDateTime=${nextCourtDateTime}, prosecutor=${prosecutor}, defendant=${defendant}`);
@@ -515,10 +525,19 @@
    * earliest future datetime as an ISO string (YYYY-MM-DDTHH:MM:SS), or
    * null if none found.
    */
-  function findNextCourtDateTime(): string | null {
+  function findNextCourtDateTime(nowOverride?: string): string | null {
     debug("Starting search for next court date");
-    const now = new Date();
+    const now = nowOverride ? new Date(nowOverride) : new Date();
+    if (isNaN(now.getTime())) {
+      throw new Error(`Invalid now override: ${nowOverride}`);
+    }
     now.setHours(0, 0, 0, 0);
+
+    // The html can include sentinel dates such as "12/31/9999" that are not real court dates,
+    // so we set a reasonable max future date to filter those out.
+    const maxFutureDate = new Date(now);
+    maxFutureDate.setFullYear(maxFutureDate.getFullYear() + 10);
+    maxFutureDate.setHours(23, 59, 59, 999);
     debug(`Today's date: ${formatISODate(now)}`);
 
     const futureDates: Date[] = [];
@@ -534,7 +553,7 @@
         const table = findNearestTable(heading);
         if (table) {
           debug("Found table near heading");
-          extractDatesFromTable(table, futureDates, now);
+          extractDatesFromTable(table, futureDates, now, maxFutureDate);
         }
       }
     }
@@ -546,7 +565,7 @@
       const tables = (mainContent || document.body).querySelectorAll("table");
       debug(`Found ${tables.length} tables`);
       for (const table of tables) {
-        extractDatesFromTable(table, futureDates, now);
+        extractDatesFromTable(table, futureDates, now, maxFutureDate);
       }
       debug(`Strategy 2 found ${futureDates.length} future dates`);
     }
@@ -562,7 +581,7 @@
       if (dateMatches) {
         for (const match of dateMatches) {
           const parsed = parseUSDate(match);
-          if (parsed && parsed >= now) {
+          if (parsed && parsed >= now && parsed <= maxFutureDate) {
             futureDates.push(parsed);
           }
         }
@@ -620,6 +639,7 @@
     table: HTMLTableElement,
     futureDates: Date[],
     now: Date,
+    maxFutureDate: Date,
   ): void {
     const cells = table.querySelectorAll("td, th");
     for (const cell of cells) {
@@ -629,7 +649,7 @@
       const dateTimeMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\s+(\d{1,2}:\d{2})\s*(AM|PM)\b/i);
       if (dateTimeMatch) {
         const parsed = parseUSDateTime(dateTimeMatch[1], dateTimeMatch[2], dateTimeMatch[3]);
-        if (parsed && parsed >= now) {
+        if (parsed && parsed >= now && parsed <= maxFutureDate) {
           futureDates.push(parsed);
         }
         continue;
@@ -639,7 +659,7 @@
       const slashMatch = text.match(/\b(\d{1,2}\/\d{1,2}\/\d{2,4})\b/);
       if (slashMatch) {
         const parsed = parseUSDate(slashMatch[1]);
-        if (parsed && parsed >= now) {
+        if (parsed && parsed >= now && parsed <= maxFutureDate) {
           futureDates.push(parsed);
         }
         continue;
@@ -651,7 +671,7 @@
       );
       if (longMatch) {
         const parsed = new Date(longMatch[1]);
-        if (!isNaN(parsed.getTime()) && parsed >= now) {
+        if (!isNaN(parsed.getTime()) && parsed >= now && parsed <= maxFutureDate) {
           futureDates.push(parsed);
         }
         continue;
@@ -661,7 +681,7 @@
       const isoMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
       if (isoMatch) {
         const parsed = new Date(isoMatch[1] + "T00:00:00");
-        if (!isNaN(parsed.getTime()) && parsed >= now) {
+        if (!isNaN(parsed.getTime()) && parsed >= now && parsed <= maxFutureDate) {
           futureDates.push(parsed);
         }
       }
@@ -778,6 +798,17 @@
     debug("Initializing content script");
     runStepWithIoErrorHandling();
   }
+
+  // Expose runScrapeStep to the window for testing purposes.
+  // Users can call `window.__COURTVIEWER_TEST_API__.runScrapeStep(state)` from the console to run a scrape step with a given state and see the result, without needing to go through the full message passing flow.
+  type WithTestAPI = Window & {
+    __COURTVIEWER_TEST_API__?: {
+      runScrapeStep: typeof runScrapeStep;
+    };
+  };
+  (window as WithTestAPI)["__COURTVIEWER_TEST_API__"] = {
+    runScrapeStep,
+  };
 
   // Run init once the DOM is ready.
   if (document.readyState === "loading") {
