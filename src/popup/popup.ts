@@ -29,6 +29,7 @@ let modalTitle: HTMLHeadingElement;
 let caseForm: HTMLFormElement;
 let caseIdInput: HTMLInputElement;
 let defendantNameInput: HTMLInputElement;
+let judgeInput: HTMLInputElement;
 let notesInput: HTMLTextAreaElement;
 let saveBtn: HTMLButtonElement;
 let cancelBtn: HTMLButtonElement;
@@ -52,6 +53,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   caseForm = document.getElementById("caseForm") as HTMLFormElement;
   caseIdInput = document.getElementById("caseIdInput") as HTMLInputElement;
   defendantNameInput = document.getElementById("defendantNameInput") as HTMLInputElement;
+  judgeInput = document.getElementById("judgeInput") as HTMLInputElement;
   notesInput = document.getElementById("notesInput") as HTMLTextAreaElement;
   cancelBtn = document.getElementById("cancelBtn") as HTMLButtonElement;
   saveBtn = document.getElementById("saveBtn") as HTMLButtonElement;
@@ -178,7 +180,7 @@ function renderTable(): void {
   // 1. Filter
   const filtered = cases.filter((c) => {
     if (!searchQuery) return true;
-    const haystack = `${c.defendantName} ${c.id} ${c.notes}`.toLowerCase();
+    const haystack = `${c.defendantName} ${c.judge} ${c.id} ${c.notes}`.toLowerCase();
     return haystack.includes(searchQuery);
   });
 
@@ -246,6 +248,11 @@ function renderTable(): void {
     const tdDefendant = document.createElement("td");
     tdDefendant.textContent = c.defendantName || "\u2014";
     tr.appendChild(tdDefendant);
+
+    // Judge
+    const tdJudge = document.createElement("td");
+    tdJudge.textContent = c.judge || "\u2014";
+    tr.appendChild(tdJudge);
 
     // Case ID
     const tdId = document.createElement("td");
@@ -360,6 +367,7 @@ function showModal(mode: "add" | "edit", caseData?: Case, prefilledCaseId?: stri
     caseIdInput.value = prefilledCaseId || "";
     caseIdInput.disabled = false;
     defendantNameInput.value = "";
+    judgeInput.value = "";
     notesInput.value = "";
   } else if (mode === "edit" && caseData) {
     modalTitle.textContent = "Edit Case";
@@ -368,6 +376,7 @@ function showModal(mode: "add" | "edit", caseData?: Case, prefilledCaseId?: stri
     caseIdInput.value = caseData.id;
     caseIdInput.disabled = true;
     defendantNameInput.value = caseData.defendantName;
+    judgeInput.value = caseData.judge ?? "";
     notesInput.value = caseData.notes;
   }
 
@@ -396,6 +405,7 @@ async function handleSave(): Promise<void> {
 
   const rawId = caseIdInput.value.trim();
   const defendantName = defendantNameInput.value.trim();
+  const judge = judgeInput.value.trim();
   const notes = notesInput.value.trim();
 
   // Validate case ID is provided
@@ -417,13 +427,13 @@ async function handleSave(): Promise<void> {
   }
 
   if (editingCaseId) {
-    await updateCase(editingCaseId, { defendantName, notes });
+    await updateCase(editingCaseId, { defendantName, judge: judge || null, notes });
   } else {
     const newCase: Case = {
       id: rawId,
       defendantName,
       prosecutor: null,
-      judge: null,
+      judge: judge || null,
       notes,
       nextCourtDateTime: null,
     };

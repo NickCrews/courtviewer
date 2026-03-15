@@ -26,6 +26,7 @@
     <thead>
       <tr>
         <th data-sort="defendantName" class="sortable">Defendant <span class="sort-arrow"></span></th>
+        <th data-sort="judge" class="sortable">Judge <span class="sort-arrow"></span></th>
         <th data-sort="id" class="sortable">Case ID <span class="sort-arrow"></span></th>
         <th data-sort="nextCourtDateTime" class="sortable">Next Court Date <span class="sort-arrow"></span></th>
         <th data-sort="lastScrape" class="sortable">Last Scraped <span class="sort-arrow"></span></th>
@@ -57,11 +58,20 @@
           >
         </div>
         <div class="form-group">
-          <label for="defendantNameInput">Defendant Name</label>
+          <label for="defendantNameInput">Defendant</label>
           <input
             type="text"
             id="defendantNameInput"
             placeholder="Last, First"
+            autocomplete="off"
+          >
+        </div>
+        <div class="form-group">
+          <label for="judgeInput">Judge</label>
+          <input
+            type="text"
+            id="judgeInput"
+            placeholder="Judge Name"
             autocomplete="off"
           >
         </div>
