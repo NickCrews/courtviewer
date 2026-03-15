@@ -26,8 +26,10 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         expected: {
             nextCourtDateTime: "2026-03-24T13:30:00",
             prosecutor: "State of Alaska",
-            defendant: "Posey, Lisa Ann",
-            judge: "Williams, Dawson A",
+            // raw defendant: "Posey, Lisa Ann",
+            defendant: "Lisa Posey",
+            // raw judge: "Williams, Dawson A",
+            judge: "Dawson Williams",
         },
     },
     {
@@ -38,8 +40,10 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         expected: {
             nextCourtDateTime: null,
             prosecutor: "State of Alaska",
-            defendant: "Posey, Lisa Ann",
-            judge: "Williams, Dawson A",
+            // raw defendant: "Posey, Lisa Ann",
+            defendant: "Lisa Posey",
+            // raw judge: "Williams, Dawson A",
+            judge: "Dawson Williams",
         },
     },
     {
@@ -50,8 +54,10 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         expected: {
             nextCourtDateTime: "2026-03-24T13:30:00",
             prosecutor: "State of Alaska",
-            defendant: "Posey, Lisa Ann",
-            judge: "Williams, Dawson A",
+            // raw defendant: "Posey, Lisa Ann",
+            defendant: "Lisa Posey",
+            // raw judge: "Williams, Dawson A",
+            judge: "Dawson Williams",
         },
     },
     {
@@ -62,8 +68,10 @@ export const CASE_PAGE_SNAPSHOTS: CasePageSnapshot[] = [
         expected: {
             nextCourtDateTime: "2026-05-13T15:30:00",
             prosecutor: "State of Alaska",
-            defendant: "Barney, Dallan Kenneth Edwin",
-            judge: "McKay, Jr, Patrick J",
+            // raw defendant: "Barney, Dallan Kenneth Edwin",
+            defendant: "Dallan Barney",
+            // raw judge: "McKay, Jr, Patrick J",
+            judge: "Patrick McKay",
         },
     },
 ];

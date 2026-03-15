@@ -481,6 +481,22 @@
 
   }
 
+  const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
+  /**
+   * "Last, First Middle" -> "First Last"
+   * "McKay, Jr, Patrick J" -> "Patrick McKay"
+   * "State of Alaska" -> "State of Alaska" (no comma, returned as-is)
+   */
+  function friendlyName(raw: string): string {
+    const parts = raw.split(",").map((p) => p.trim()).filter(Boolean);
+    if (parts.length < 2) return raw;
+    const lastName = parts[0];
+    const rest = parts.slice(1).filter((p) => !SUFFIXES.has(p.toLowerCase()));
+    const firstName = rest.join(" ").split(/\s+/)[0];
+    if (!firstName) return raw;
+    return `${firstName} ${lastName}`;
+  }
+
   interface CaseParties {
     prosecutor: string | null;
     defendant: string | null;
@@ -500,7 +516,7 @@
       if (/\s*-\s*Defendant\s*$/i.test(text)) {
         const match = text.match(/^(.+?)\s*-\s*Defendant\s*$/i);
         if (match) {
-          result.defendant = match[1].trim();
+          result.defendant = friendlyName(match[1].trim());
           debug(`Found defendant element: "${text}" -> extracted: "${result.defendant}"`);
         }
       }
@@ -571,13 +587,13 @@
       if (inlineValueMatch) {
         const inlineValue = normalize(inlineValueMatch[1]);
         if (inlineValue) {
-          return inlineValue;
+          return friendlyName(inlineValue);
         }
       }
 
       const siblingValue = readNextValueText(candidate);
       if (siblingValue) {
-        return siblingValue;
+        return friendlyName(siblingValue);
       }
     }
 
