@@ -1,6 +1,6 @@
 {
   "name": "alaska-court-viewer",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Chrome extension for tracking Alaska court cases",
   "private": true,
   "scripts": {
