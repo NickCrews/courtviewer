@@ -295,17 +295,16 @@ function buildScrapedCell(c: Case): string {
   const state = c.lastScrape;
   const when = formatRelativeTime(state.timestamp);
   if (state.state === "succeeded") {
-    return `<span class="scrape-status"><span class="status-dot done"></span><div class="scrape-when">${when}</div></span>`;
+    return `<span class="scrape-status"><span class="status-dot done"></span>${when}</span>`;
   } else if (state.state === "noCaseFound") {
-    return `<span class="scrape-status" title="Case not found in search results"><span class="status-dot notfound"></span>Not Found<div class="scrape-when">${when}</div></span>`;
+    return `<span class="scrape-status" title="Case not found in search results"><span class="status-dot notfound"></span>Not Found ${when}</span>`;
   } else if (state.state === "errored") {
-    return `<span class="scrape-status" title="Error: ${escapeHtml(state.error)}"><span class="status-dot error"></span>Error<div class="scrape-when">${when}</div></span>`;
+    return `<span class="scrape-status" title="Error: ${escapeHtml(state.error)}"><span class="status-dot error"></span>Error ${when}</span>`;
   } else if (state.state === "running") {
     return `<span class="scrape-status"><span class="status-dot active"></span>Running</span>`;
   } else {
     throw new Error(`Unknown scrape state: ${(state satisfies never)}`);
   }
-
 }
 
 const ICON_OPEN = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v8A1.5 1.5 0 0 0 3.5 14h8a1.5 1.5 0 0 0 1.5-1.5V10"/><path d="M10 2h4v4"/><path d="M14 2 7.5 8.5"/></svg>`;
@@ -530,22 +529,14 @@ function escapeHtml(str: string): string {
   return str.replace(/[&<>"']/g, (ch) => map[ch] ?? ch);
 }
 
-/** Format a datetime string like "2024-07-15T14:30:00" as "Jul 15 (year), 8:30 AM" and highlight if within 7 days
- * 
- * If the year is the current year, it will be omitted for brevity.
-*/
 function formatCourtDateTime(datetimeStr: string | null): string {
   if (!datetimeStr) return "\u2014";
-
   const date = new Date(datetimeStr);
-  if (isNaN(date.getTime())) {
-    return escapeHtml(datetimeStr);
-  }
+  if (isNaN(date.getTime())) return escapeHtml(datetimeStr);
 
   const now = new Date();
   const diffMs = date.getTime() - now.getTime();
   const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-
   const currentYear = now.getFullYear();
   const dateYear = date.getFullYear();
 
@@ -554,20 +545,22 @@ function formatCourtDateTime(datetimeStr: string | null): string {
     day: "numeric",
     year: dateYear === currentYear ? undefined : "numeric",
   });
-
   const timePart = date.toLocaleTimeString("en-US", {
     hour: "numeric",
     minute: "2-digit",
     hour12: true,
   });
 
-  const formatted = `${datePart}, ${timePart}`;
-
-  if (diffDays >= 0 && diffDays <= 7) {
-    return `<span class="upcoming">${escapeHtml(formatted)}</span>`;
+  let relPart = "";
+  if (diffDays >= 0) {
+    const weeks = Math.floor(diffDays / 7);
+    relPart = weeks > 4
+      ? `in ${weeks} weeks`
+      : diffDays === 0 ? "today" : diffDays === 1 ? "tomorrow" : `in ${diffDays} days`;
   }
 
-  return escapeHtml(formatted);
+  const cls = diffDays >= 0 && diffDays <= 7 ? " upcoming" : "";
+  return `<span class="court-date${cls}"><span class="court-date-day">${escapeHtml(datePart)}</span><span class="court-date-time">${escapeHtml(timePart)}</span>${relPart ? `<span class="court-date-rel">${escapeHtml(relPart)}</span>` : ""}</span>`;
 }
 
 
@@ -582,17 +575,17 @@ function formatRelativeTime(isoString: string): string {
   if (seconds < 60) return "just now";
 
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60) return `${minutes} m ago`;
 
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  if (hours < 24) return `${hours} h ago`;
 
   const days = Math.floor(hours / 24);
-  if (days < 30) return `${days} day${days !== 1 ? "s" : ""} ago`;
+  if (days < 30) return `${days} d ago`;
 
   const months = Math.floor(days / 30);
-  if (months < 12) return `${months} month${months !== 1 ? "s" : ""} ago`;
+  if (months < 12) return `${months} mo ago`;
 
   const years = Math.floor(months / 12);
-  return `${years} year${years !== 1 ? "s" : ""} ago`;
+  return `${years} y ago`;
 }

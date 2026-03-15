@@ -16,10 +16,10 @@ body {
   min-width: 700px;
   max-width: 800px;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  font-size: 14px;
+  font-size: 11px;
   color: #1e293b;
   background: #ffffff;
-  line-height: 1.5;
+  line-height: 1.4;
 }
 
 /* Full-tab mode: page is served as a regular tab, so no popup size limits */
@@ -33,11 +33,11 @@ body {
 .header {
   background: #1e293b;
   color: #ffffff;
-  padding: 16px 20px;
+  padding: 10px 16px;
 }
 
 .header h1 {
-  font-size: 18px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.02em;
 }
@@ -52,17 +52,17 @@ body {
 .controls-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 20px;
+  gap: 8px;
+  padding: 8px 16px;
   border-bottom: 1px solid #e2e8f0;
   background: #f8fafc;
 }
 
 .search-input {
   flex: 1;
-  height: 36px;
-  padding: 0 12px;
-  font-size: 13px;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
   border: 1px solid #cbd5e1;
   border-radius: 6px;
   outline: none;
@@ -79,9 +79,9 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
-  padding: 0 16px;
-  font-size: 13px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
   font-weight: 600;
   border: none;
   border-radius: 6px;
@@ -135,9 +135,9 @@ body {
 }
 
 .btn-sm {
-  height: 28px;
-  padding: 0 10px;
-  font-size: 12px;
+  height: 24px;
+  padding: 0 8px;
+  font-size: 11px;
   border-radius: 4px;
 }
 
@@ -164,8 +164,8 @@ body {
 }
 
 .cases-table thead th {
-  padding: 10px 14px;
-  font-size: 12px;
+  padding: 7px 10px;
+  font-size: 10px;
   font-weight: 600;
   text-align: left;
   text-transform: uppercase;
@@ -226,8 +226,8 @@ th.sort-desc .sort-arrow::after {
 }
 
 .cases-table tbody td {
-  padding: 10px 14px;
-  font-size: 13px;
+  padding: 7px 10px;
+  font-size: 12px;
   text-align: left;
   vertical-align: middle;
 }
@@ -243,11 +243,11 @@ th.sort-desc .sort-arrow::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 1px solid #cbd5e1;
-  border-radius: 6px;
+  border-radius: 5px;
   background: transparent;
   color: #475569;
   cursor: pointer;
@@ -280,23 +280,67 @@ th.sort-desc .sort-arrow::after {
 
 /* ===== Truncated Cells ===== */
 .cell-truncate {
-  max-width: 160px;
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .cases-table th.actions-header {
-  display: flex;
+  text-align: center;
+}
+
+.btn-icon-scrape-all {
+  display: inline-flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 3px;
+  margin-top: 4px;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #16a34a;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s;
+}
+
+.btn-icon-scrape-all:hover {
+  background: #15803d;
+}
+
+.btn-icon-scrape-all svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* ===== Court Date Styling ===== */
-.upcoming {
+.court-date {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.court-date-time {
+  font-size: 10px;
+  color: #64748b;
+}
+
+.court-date-rel {
+  font-size: 10px;
+  color: #64748b;
+  font-style: italic;
+}
+
+.court-date.upcoming .court-date-day {
   color: #dc2626;
   font-weight: 600;
+}
+
+.court-date.upcoming .court-date-rel {
+  color: #dc2626;
 }
 
 /* ===== Scraping Status ===== */
@@ -305,15 +349,8 @@ th.sort-desc .sort-arrow::after {
   flex-direction: row;
   align-items: center;
   gap: 5px;
-  font-size: 12px;
-  flex-wrap: wrap;
-}
-
-.scrape-when {
-  flex-basis: 100%;
-  font-size: 10px;
-  opacity: 0.8;
-  margin-top: 2px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .status-dot {
