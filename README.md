@@ -26,13 +26,13 @@ Alaska Court Viewer helps you manage a list of court cases, automatically look u
 To update to a newer version of Alaska Court Viewer while preserving your saved cases:
 
 1. Download the latest release .zip file from https://github.com/NickCrews/courtviewer/releases.
-2. Unzip this to a new folder.
+2. Unzip this, and replace the contents of the old folder with the contents of the new folder.
 3. Open Chrome and type `chrome://extensions/` in the address bar, then press Enter.
 4. Find "Alaska Court Viewer" in the list.
-5. Click the **trash/delete icon** to uninstall the old version. *(Your case data will be preserved in your Chrome profile.)*
-6. Click the **"Load unpacked"** button.
-7. In the file picker, select the newly unzipped folder.
-8. The updated Alaska Court Viewer will now be installed and ready to use. Your cases and data will appear in the popup.
+5. Click the **reload** button (🔄) on the extension to reload it.
+
+Your data should be preserved only with reloading.
+If you instead delete and then re-add the new version as a new extension, your data will NOT be preserved. 
 
 ---
 
@@ -54,30 +54,31 @@ that as well.
 ### Adding Cases
 
 1. Click the Alaska Court Viewer icon in your Chrome toolbar. A popup window will appear.
-2. Click **"Add Case."**
-3. Enter the case number (for example, `3AN-24-00123CR`), the defendant name, and any notes you would like to save.
-4. Click **Save.**
+1. Enter the case number (for example, `3AN-24-00123CR`) in the search bar.
+1. Click **"Add Case"**
+1. Optionally, enter the defendant and/or judge.
+   If not given, they will be parsed and filled in automatically on the first scrape.
+1. Click **Save.**
+
+The extension will open a tab in the background, navigate to the courtviewer website,
+lookup that case, extract the relevant info, and save it locally to your computer.
 
 ### Viewing Your Cases
 
 - All of your cases are displayed in a table inside the popup.
 - **Sort** by clicking any column header. Click the same header again to reverse the sort order.
-- **Search** using the search bar to filter by defendant name, case ID, or notes.
-- The **"Next Court Date"** column shows the next upcoming hearing date for each case.
+- **Search** using the search bar to filter by defendant name, case ID, judge, or notes.
+- The **"Defendant"** column shows the defendant's name. If empty, will populate automatically on the next refresh.
+- The **"Judge"** column shows the assigned judge. If empty, will populate automatically on the next refresh.
+- The **"Next Eevent"** column shows the next upcoming hearing date for each case. If the case is closed, it shows "closed" instead.
 - The **"Last Scraped"** column shows when the extension last looked up information for that case on CourtView.
 
-### Looking Up Case Information
+### Opening, Refreshing, Editing and Deleting Cases
 
-- Click **"Scrape"** next to any individual case to look up its latest information from CourtView and save it locally.
-- Click **"Scrape All"** to look up all of your cases at once. The extension opens background tabs to check each case on the CourtView website.
-- The extension will automatically navigate the CourtView website, search for the case, and extract the next court date.
-- Results appear in the table once the lookup is complete.
-- Click **"Open"** to open a live tab with the current case information directly from CourtView. This does not update your saved data.
-
-### Editing and Deleting Cases
-
-- Click **"Edit"** next to a case to change its defendant name or notes.
-- Click **"Delete"** to remove a case. This also removes any scraped data that was saved for that case.
+- Click the **refresh icon** (🔄) next to any individual case to scrape that case again in a background tab.
+- Click the **open icon** (↗) to open that case in courtview. This also updates the info. This is just "refresh", except it doesnt close the tab after completing.
+- Click the **edit icon** (✎) next to a case to change its defendant name, judge, or notes.
+- Click the **delete icon** (🗑) to remove a case and all scraped data.
 
 ---
 
@@ -92,7 +93,6 @@ that as well.
 - **Clearing Chrome's browsing data** (specifically the "Extensions" category) will delete your Court Viewer data.
 - **Uninstalling the extension** will permanently delete all stored data.
 - There is **no automatic backup.** Consider periodically writing down critical case information elsewhere as a safeguard.
-- When you click **"Scrape"**, the extension saves the case details and next court date to your local storage. When you click **"Open"**, the extension accesses live data without saving it, allowing you to view the most current information.
 
 ---
 
@@ -102,7 +102,7 @@ that as well.
   Make sure Developer Mode is enabled on the `chrome://extensions/` page, and that you loaded the `dist` folder (not the top-level courtviewer folder).
 
 - **No court date is showing for a case.**
-  Some cases may not have upcoming events scheduled on CourtView. The extension displays a dash ("--") when no future court date is found.
+  Some cases may not have upcoming events scheduled on CourtView. The extension displays a dash ("--") when no future court date is found. If the case is closed, "closed" will appear instead.
 
 - **My data seems to have disappeared.**
   Check that you are using the same Chrome profile you were using before. Data does not sync between different profiles or different devices.
