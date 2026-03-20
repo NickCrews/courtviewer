@@ -2,7 +2,7 @@
 
 A Chrome extension for tracking and automatically looking up Alaska court case information.
 
-Alaska Court Viewer helps you manage a list of court cases, automatically look up case details from the Alaska Court System's CourtView website, and view upcoming court dates in a sortable, searchable table -- all from your browser toolbar.
+Alaska Court Viewer helps you manage a list of court cases, automatically look up case details from the [Alaska Court System's CourtView website](https://records.courts.alaska.gov/eaccess/search.page), and view upcoming court dates in a sortable, searchable table -- all from your browser toolbar.
 
 ![Screenshot](assets/screenshot.png)
 
